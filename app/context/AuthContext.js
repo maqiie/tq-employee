@@ -26,11 +26,7 @@ export const AuthProvider = ({ children }) => {
     loadUser();
   }, []);
 
-//   const login = async (userData) => {
-//     console.log('Logging in user:', userData);
-//     setUser(userData);
-//     await storeUserData(userData); // Store data when login
-//   };
+
 const login = async ({ user, accessToken, client, uid }) => {
     setUser(user);
     await storeUserData({ user, accessToken, client, uid });
