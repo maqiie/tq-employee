@@ -40,7 +40,7 @@ const LoginScreen = ({ navigation }) => {
       }
 
       const validateResponse = await axios.get(
-        "http://192.168.100.5:3001/auth/validate_token",
+        "http://192.168.1.191:3001/auth/validate_token",
         {
           headers: {
             "access-token": accessToken,
