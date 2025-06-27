@@ -22,7 +22,7 @@ import {
   getWeeklyStats,
   getMonthlyStats,
   getAgentsPerformance,
-  getDebtors,
+  getDebtorsOverview,
 } from "../services/api";
 import { format } from "date-fns";
 import { getUserData } from "../services/auth";
@@ -377,6 +377,11 @@ const DashboardScreen = () => {
   const fetchAllDebtors = useCallback(async () => {
     try {
       const userData = await getUserData();
+      if (!userData) {
+        console.error("❌ No user data available");
+        return;
+      }
+      
       const headers = {
         "access-token": userData.userToken,
         client: userData.client,
@@ -385,11 +390,51 @@ const DashboardScreen = () => {
       };
       
       console.log('👥 Fetching all debtors...');
-      const data = await getDebtors(headers);
-      console.log('📊 All debtors received:', data);
-      setAllDebtors(data.debtors || data || []);
+      
+      // Check if the function exists before calling
+      if (typeof getDebtorsOverview !== 'function') {
+        console.error("❌ getDebtorsOverview is not a function:", typeof getDebtorsOverview);
+        Alert.alert("Error", "Debtors overview function not available");
+        return;
+      }
+      
+      const response = await getDebtorsOverview(headers);
+      console.log('📊 Debtors overview received:', response);
+      
+      // Handle the data structure similar to DebtOverviewScreen
+      const debtSummary = response?.debt_summary || [];
+      const validatedDebtors = Array.isArray(debtSummary)
+        ? debtSummary
+            .map((item) => {
+              if (item?.id === undefined) {
+                console.error("Debtor is missing an ID:", item);
+                return null;
+              }
+              return {
+                ...item,
+                id: item.id,
+                balance_due: parseFloat(item.balance_due || 0),
+                created_at: item.created_at || new Date().toISOString(),
+                debtor_name: item.debtor_name || "Unknown Debtor",
+                phone: item.phone || null,
+                // Map to common fields for compatibility
+                name: item.debtor_name || "Unknown Debtor",
+                total_debt: parseFloat(item.balance_due || 0),
+                amount: parseFloat(item.balance_due || 0),
+                total_paid: 0, // This might need to be calculated differently
+                amount_paid: 0,
+                status: item.balance_due > 0 ? 'active' : 'paid',
+                is_fully_paid: item.balance_due <= 0,
+              };
+            })
+            .filter(Boolean)
+        : [];
+      
+      setAllDebtors(validatedDebtors);
+      console.log('✅ Processed debtors:', validatedDebtors.length);
     } catch (error) {
       console.error("❌ Error fetching all debtors:", error);
+      Alert.alert("Error", error.message || "Failed to load debtors");
     }
   }, []);
 
@@ -489,6 +534,26 @@ const DashboardScreen = () => {
           label: 'Collected Debt', 
           value: quickStats.totalDebtCollected, 
           displayValue: formatCurrency(quickStats.totalDebtCollected),
+          color: '#10B981'
+        },
+      ],
+      debtorDistribution: [
+        {
+          label: 'High Debt (>TSh 1M)',
+          value: allDebtors.filter(d => d.balance_due > 1000000).length,
+          displayValue: allDebtors.filter(d => d.balance_due > 1000000).length.toString(),
+          color: '#DC2626'
+        },
+        {
+          label: 'Medium Debt (>TSh 500K)',
+          value: allDebtors.filter(d => d.balance_due > 500000 && d.balance_due <= 1000000).length,
+          displayValue: allDebtors.filter(d => d.balance_due > 500000 && d.balance_due <= 1000000).length.toString(),
+          color: '#F59E0B'
+        },
+        {
+          label: 'Low Debt (≤TSh 500K)',
+          value: allDebtors.filter(d => d.balance_due <= 500000).length,
+          displayValue: allDebtors.filter(d => d.balance_due <= 500000).length.toString(),
           color: '#10B981'
         },
       ],
@@ -1121,7 +1186,7 @@ const DashboardScreen = () => {
                   </View>
                   <View style={styles.summaryItem}>
                     <Text style={[styles.summaryValue, { color: '#EF4444' }]}>
-                      {formatCurrency(quickStats.totalDebtOutstanding)}
+                      {formatCurrency(allDebtors.reduce((sum, d) => sum + d.balance_due, 0))}
                     </Text>
                     <Text style={styles.summaryLabel}>Outstanding</Text>
                   </View>
@@ -1132,6 +1197,15 @@ const DashboardScreen = () => {
                     <Text style={styles.summaryLabel}>Collected</Text>
                   </View>
                 </View>
+              </View>
+
+              {/* Debt Distribution by Severity */}
+              <View style={styles.fullWidthCard}>
+                <ModernPieChart 
+                  data={chartData.debtorDistribution}
+                  title="Debtors by Risk Level"
+                  size={180}
+                />
               </View>
 
               {/* Debt Distribution Chart */}
@@ -1152,89 +1226,136 @@ const DashboardScreen = () => {
                   
                   <FlatList
                     data={allDebtors}
-                    renderItem={({ item }) => (
-                      <View style={styles.fullWidthCard}>
-                        <View style={styles.debtorHeader}>
-                          <View>
-                            <Text style={styles.debtorName}>{item.name || 'Unknown'}</Text>
-                            <Text style={styles.debtorPhone}>{item.phone || item.phone_number || 'No phone'}</Text>
-                            {item.agent_name && (
-                              <Text style={styles.debtorAgent}>via {item.agent_name}</Text>
-                            )}
-                            {item.created_at && (
-                              <Text style={styles.debtorDate}>
-                                Created: {new Date(item.created_at).toLocaleDateString()}
+                    renderItem={({ item }) => {
+                      // Get debt severity like in DebtorItem
+                      const getDebtSeverity = (amount) => {
+                        if (amount > 1000000) return { color: "#DC2626", label: "High" }; // > 1M TSh
+                        if (amount > 500000) return { color: "#F59E0B", label: "Medium" }; // > 500K TSh
+                        return { color: "#10B981", label: "Low" };
+                      };
+                      
+                      const debtSeverity = getDebtSeverity(item.balance_due);
+                      
+                      return (
+                        <View style={styles.modernDebtorCard}>
+                          <View style={styles.debtorHeader}>
+                            <View style={styles.debtorMainInfo}>
+                              <View style={styles.debtorNameRow}>
+                                <Text style={styles.debtorName}>{item.debtor_name || item.name || 'Unknown'}</Text>
+                                <View style={[
+                                  styles.severityBadge,
+                                  { backgroundColor: debtSeverity.color + '20' }
+                                ]}>
+                                  <Text style={[styles.severityText, { color: debtSeverity.color }]}>
+                                    {debtSeverity.label}
+                                  </Text>
+                                </View>
+                              </View>
+                              <Text style={styles.debtorPhone}>
+                                {item.phone || item.phone_number || 'No phone'}
                               </Text>
+                              {item.created_at && (
+                                <Text style={styles.debtorDate}>
+                                  Created: {new Date(item.created_at).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric',
+                                  })}
+                                </Text>
+                              )}
+                            </View>
+                            <View style={[
+                              styles.debtorStatus,
+                              { backgroundColor: item.balance_due > 0 ? '#EF4444' : '#10B981' }
+                            ]}>
+                              <Text style={styles.debtorStatusText}>
+                                {item.balance_due > 0 ? 'Active' : 'Paid'}
+                              </Text>
+                            </View>
+                          </View>
+                          
+                          <View style={styles.debtorMetrics}>
+                            <View style={styles.debtorMetric}>
+                              <Text style={styles.debtorMetricLabel}>Outstanding</Text>
+                              <Text style={[styles.debtorMetricValue, { color: '#EF4444' }]}>
+                                {formatCurrency(item.balance_due || 0)}
+                              </Text>
+                            </View>
+                            <View style={styles.debtorMetric}>
+                              <Text style={styles.debtorMetricLabel}>Severity</Text>
+                              <Text style={[styles.debtorMetricValue, { color: debtSeverity.color }]}>
+                                {debtSeverity.label}
+                              </Text>
+                            </View>
+                            <View style={styles.debtorMetric}>
+                              <Text style={styles.debtorMetricLabel}>Days</Text>
+                              <Text style={styles.debtorMetricValue}>
+                                {item.created_at 
+                                  ? Math.floor((new Date() - new Date(item.created_at)) / (1000 * 60 * 60 * 24))
+                                  : 0}
+                              </Text>
+                            </View>
+                          </View>
+
+                          {/* Progress Bar - if there's payment history */}
+                          {(item.total_debt || item.amount) && (
+                            <View style={styles.progressBarContainer}>
+                              <View style={styles.progressBarTrack}>
+                                <View
+                                  style={[
+                                    styles.progressBarFill,
+                                    { 
+                                      width: `${
+                                        (item.total_debt || item.amount) > 0 
+                                          ? (((item.total_paid || item.amount_paid || 0) / (item.total_debt || item.amount)) * 100) 
+                                          : 0
+                                      }%` 
+                                    }
+                                  ]}
+                                />
+                              </View>
+                              <Text style={styles.progressBarText}>
+                                {(item.total_debt || item.amount) > 0 
+                                  ? (((item.total_paid || item.amount_paid || 0) / (item.total_debt || item.amount)) * 100).toFixed(1) 
+                                  : 0}% paid
+                              </Text>
+                            </View>
+                          )}
+
+                          {/* Additional Details */}
+                          {(item.description || item.purpose) && (
+                            <View style={styles.debtorDescription}>
+                              <Text style={styles.debtorDescriptionLabel}>Description:</Text>
+                              <Text style={styles.debtorDescriptionText}>
+                                {item.description || item.purpose}
+                              </Text>
+                            </View>
+                          )}
+
+                          {/* Quick Action Buttons */}
+                          <View style={styles.debtorActions}>
+                            <TouchableOpacity 
+                              style={styles.debtorActionButton}
+                              onPress={() => navigation.navigate('DebtorDetails', { debtorId: item.id })}
+                            >
+                              <Icon name="visibility" size={16} color="#6366F1" />
+                              <Text style={styles.debtorActionText}>View Details</Text>
+                            </TouchableOpacity>
+                            
+                            {item.balance_due > 0 && (
+                              <TouchableOpacity 
+                                style={[styles.debtorActionButton, { backgroundColor: '#10B981' }]}
+                                onPress={() => navigation.navigate('PaymentScreen', { debtorId: item.id })}
+                              >
+                                <Icon name="payment" size={16} color="#FFFFFF" />
+                                <Text style={[styles.debtorActionText, { color: '#FFFFFF' }]}>Record Payment</Text>
+                              </TouchableOpacity>
                             )}
                           </View>
-                          <View style={[
-                            styles.debtorStatus,
-                            { backgroundColor: (item.status === 'active' || !item.is_fully_paid) ? '#EF4444' : '#10B981' }
-                          ]}>
-                            <Text style={styles.debtorStatusText}>
-                              {(item.status === 'active' || !item.is_fully_paid) ? 'Active' : 'Paid'}
-                            </Text>
-                          </View>
                         </View>
-                        
-                        <View style={styles.debtorMetrics}>
-                          <View style={styles.debtorMetric}>
-                            <Text style={styles.debtorMetricLabel}>Total Debt</Text>
-                            <Text style={styles.debtorMetricValue}>
-                              {formatCurrency(item.total_debt || item.amount || 0)}
-                            </Text>
-                          </View>
-                          <View style={styles.debtorMetric}>
-                            <Text style={styles.debtorMetricLabel}>Paid</Text>
-                            <Text style={[styles.debtorMetricValue, { color: '#10B981' }]}>
-                              {formatCurrency(item.total_paid || item.amount_paid || 0)}
-                            </Text>
-                          </View>
-                          <View style={styles.debtorMetric}>
-                            <Text style={styles.debtorMetricLabel}>Remaining</Text>
-                            <Text style={[styles.debtorMetricValue, { color: '#EF4444' }]}>
-                              {formatCurrency(
-                                (item.total_debt || item.amount || 0) - (item.total_paid || item.amount_paid || 0)
-                              )}
-                            </Text>
-                          </View>
-                        </View>
-
-                        {/* Progress Bar */}
-                        <View style={styles.progressBarContainer}>
-                          <View style={styles.progressBarTrack}>
-                            <View
-                              style={[
-                                styles.progressBarFill,
-                                { 
-                                  width: `${
-                                    (item.total_debt || item.amount) > 0 
-                                      ? (((item.total_paid || item.amount_paid || 0) / (item.total_debt || item.amount)) * 100) 
-                                      : 0
-                                  }%` 
-                                }
-                              ]}
-                            />
-                          </View>
-                          <Text style={styles.progressBarText}>
-                            {(item.total_debt || item.amount) > 0 
-                              ? (((item.total_paid || item.amount_paid || 0) / (item.total_debt || item.amount)) * 100).toFixed(1) 
-                              : 0}% paid
-                          </Text>
-                        </View>
-
-                        {/* Additional Details */}
-                        {(item.description || item.purpose) && (
-                          <View style={styles.debtorDescription}>
-                            <Text style={styles.debtorDescriptionLabel}>Description:</Text>
-                            <Text style={styles.debtorDescriptionText}>
-                              {item.description || item.purpose}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    )}
-                    keyExtractor={(item) => (item.id || item.debtor_id || Math.random()).toString()}
+                      );
+                    }}
+                    keyExtractor={(item) => (item.id || Math.random()).toString()}
                     scrollEnabled={false}
                   />
                 </>
@@ -1945,6 +2066,38 @@ const styles = StyleSheet.create({
   },
 
   // Enhanced Debtor Styles
+  modernDebtorCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 12,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    borderLeftWidth: 4,
+    borderLeftColor: '#6366F1',
+  },
+  debtorMainInfo: {
+    flex: 1,
+  },
+  debtorNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  severityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  severityText: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
   debtorDate: {
     fontSize: 11,
     color: '#9CA3AF',
@@ -1966,6 +2119,31 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#374151',
     lineHeight: 18,
+  },
+  debtorActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  debtorActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    flex: 1,
+    marginHorizontal: 4,
+    justifyContent: 'center',
+  },
+  debtorActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6366F1',
+    marginLeft: 4,
   },
   emptyStateSubtext: {
     fontSize: 14,
