@@ -178,12 +178,12 @@ export const getLatestTransaction = async (employeeId, headers) => {
 };
 
 // Dashboard API calls
-export const getDashboardData = async (headers) => {
+export const getDashboardStats = async (headers) => {
   try {
-    const response = await api.get('/employees/dashboard', { headers });
+    const response = await api.get('/employees/dashboard/stats', { headers }); // Note: added /stats
     return response.data;
   } catch (error) {
-    console.error('Error fetching dashboard data:', error);
+    console.error('Error fetching dashboard stats:', error);
     throw error;
   }
 };

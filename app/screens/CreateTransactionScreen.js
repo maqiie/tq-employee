@@ -12,12 +12,30 @@ import {
   Platform,
   ActivityIndicator,
   Keyboard,
+  Modal,
+  FlatList,
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { createTransaction } from "../services/api";
+import { createTransaction, getAgents } from "../services/api";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const DailyBalanceScreen = ({ navigation, route }) => {
   const { employeeId } = route.params || {};
+  
+  // Existing state
+  const [openingBalance, setOpeningBalance] = useState("");
+  const [closingBalance, setClosingBalance] = useState("");
+  const [notes, setNotes] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [fetchingPrevious, setFetchingPrevious] = useState(true);
+  const [date, setDate] = useState(new Date());
+  const [transactionCreated, setTransactionCreated] = useState(false);
+  
+  // New agent selection state
+  const [agents, setAgents] = useState([]);
+  const [selectedAgent, setSelectedAgent] = useState(null);
+  const [agentModalVisible, setAgentModalVisible] = useState(false);
+  const [fetchingAgents, setFetchingAgents] = useState(true);
 
   useEffect(() => {
     if (!employeeId) {
@@ -29,14 +47,6 @@ const DailyBalanceScreen = ({ navigation, route }) => {
     }
   }, [employeeId, navigation]);
 
-  const [openingBalance, setOpeningBalance] = useState("");
-  const [closingBalance, setClosingBalance] = useState("");
-  const [notes, setNotes] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [fetchingPrevious, setFetchingPrevious] = useState(true);
-  const [date, setDate] = useState(new Date());
-  const [transactionCreated, setTransactionCreated] = useState(false);
-
   const formattedDate = date.toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
@@ -46,6 +56,7 @@ const DailyBalanceScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     if (!employeeId) return;
+
     const fetchPreviousBalance = async () => {
       try {
         setFetchingPrevious(true);
@@ -60,18 +71,61 @@ const DailyBalanceScreen = ({ navigation, route }) => {
         setFetchingPrevious(false);
       }
     };
+
+    const fetchAgentsList = async () => {
+      try {
+        setFetchingAgents(true);
+        
+        // Get authentication data from AsyncStorage
+        const userToken = await AsyncStorage.getItem('userToken');
+        const client = await AsyncStorage.getItem('client');
+        const uid = await AsyncStorage.getItem('uid');
+        
+        if (!userToken || !client || !uid) {
+          throw new Error('Missing authentication data. Please login again.');
+        }
+
+        const headers = {
+          'access-token': userToken,
+          'client': client,
+          'uid': uid,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        };
+        
+        const response = await getAgents(headers);
+        console.log('Agents response:', response);
+        
+        // Handle different response structures
+        const agentsData = response?.data || response || [];
+        setAgents(Array.isArray(agentsData) ? agentsData : []);
+      } catch (error) {
+        console.error("Error fetching agents:", error);
+        Alert.alert("Error", "Failed to fetch agents list. Please check your internet connection and try again.");
+        setAgents([]);
+      } finally {
+        setFetchingAgents(false);
+      }
+    };
+
     fetchPreviousBalance();
+    fetchAgentsList();
   }, [employeeId]);
 
   const validateAmounts = () => {
     const opening = parseFloat(openingBalance);
     const closing = parseFloat(closingBalance);
+    
     if (isNaN(opening)) {
       Alert.alert("Error", "Please enter a valid opening balance");
       return false;
     }
     if (isNaN(closing)) {
       Alert.alert("Error", "Please enter a valid closing balance");
+      return false;
+    }
+    if (!selectedAgent) {
+      Alert.alert("Error", "Please select an agent");
       return false;
     }
     return true;
@@ -86,18 +140,38 @@ const DailyBalanceScreen = ({ navigation, route }) => {
     if (!validateAmounts()) {
       return;
     }
+
     try {
       setLoading(true);
+      
       const balanceData = {
         opening_balance: parseFloat(openingBalance),
         closing_balance: parseFloat(closingBalance),
         notes: notes.trim(),
         date: date.toISOString(),
+        agent_id: selectedAgent.id,
       };
 
-      await createTransaction(employeeId, balanceData);
+      // Get authentication headers for the transaction
+      const userToken = await AsyncStorage.getItem('userToken');
+      const client = await AsyncStorage.getItem('client');
+      const uid = await AsyncStorage.getItem('uid');
+      
+      if (!userToken || !client || !uid) {
+        throw new Error('Authentication required. Please login again.');
+      }
 
+      const headers = {
+        'access-token': userToken,
+        'client': client,
+        'uid': uid,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      };
+
+      await createTransaction(employeeId, balanceData, headers);
       setTransactionCreated(true);
+
       Alert.alert("Success", "Balance record saved successfully", [
         { text: "OK", onPress: () => navigation.goBack() },
       ]);
@@ -109,6 +183,11 @@ const DailyBalanceScreen = ({ navigation, route }) => {
     }
   };
 
+  const handleAgentSelect = (agent) => {
+    setSelectedAgent(agent);
+    setAgentModalVisible(false);
+  };
+
   const calculateDifference = () => {
     const opening = parseFloat(openingBalance) || 0;
     const closing = parseFloat(closingBalance) || 0;
@@ -118,6 +197,28 @@ const DailyBalanceScreen = ({ navigation, route }) => {
   const difference = calculateDifference();
   const isDifferencePositive = parseFloat(difference) > 0;
   const isDifferenceNegative = parseFloat(difference) < 0;
+
+  const renderAgentItem = ({ item }) => (
+    <TouchableOpacity
+      style={styles.agentItem}
+      onPress={() => handleAgentSelect(item)}
+    >
+      <View style={styles.agentItemContent}>
+        <View style={styles.agentAvatar}>
+          <Text style={styles.agentAvatarText}>
+            {item.name?.charAt(0)?.toUpperCase() || 'A'}
+          </Text>
+        </View>
+        <View style={styles.agentInfo}>
+          <Text style={styles.agentName}>{item.name || 'Unknown Agent'}</Text>
+          <Text style={styles.agentEmail}>{item.email || 'No email provided'}</Text>
+        </View>
+        {selectedAgent?.id === item.id && (
+          <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+        )}
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -133,6 +234,7 @@ const DailyBalanceScreen = ({ navigation, route }) => {
           bounces={true}
           alwaysBounceVertical={true}
         >
+          {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity
               style={styles.backButton}
@@ -144,6 +246,7 @@ const DailyBalanceScreen = ({ navigation, route }) => {
             <View style={{ width: 44 }} />
           </View>
 
+          {/* Date Display */}
           <View style={styles.dateContainer}>
             <View style={styles.dateIconWrapper}>
               <MaterialCommunityIcons name="calendar" size={22} color="#3B82F6" />
@@ -151,6 +254,48 @@ const DailyBalanceScreen = ({ navigation, route }) => {
             <Text style={styles.dateText}>{formattedDate}</Text>
           </View>
 
+          {/* Agent Selection */}
+          <View style={styles.agentSection}>
+            <Text style={styles.sectionLabel}>Select Agent *</Text>
+            {fetchingAgents ? (
+              <View style={styles.agentLoadingContainer}>
+                <ActivityIndicator size="small" color="#3B82F6" />
+                <Text style={styles.loadingText}>Loading agents...</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.agentSelector}
+                onPress={() => setAgentModalVisible(true)}
+              >
+                <View style={styles.agentSelectorContent}>
+                  {selectedAgent ? (
+                    <View style={styles.selectedAgentDisplay}>
+                      <View style={styles.selectedAgentAvatar}>
+                        <Text style={styles.selectedAgentAvatarText}>
+                          {selectedAgent.name?.charAt(0)?.toUpperCase() || 'A'}
+                        </Text>
+                      </View>
+                      <View style={styles.selectedAgentInfo}>
+                        <Text style={styles.selectedAgentName}>
+                          {selectedAgent.name || 'Unknown Agent'}
+                        </Text>
+                        <Text style={styles.selectedAgentEmail}>
+                          {selectedAgent.email || 'No email provided'}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <Text style={styles.agentPlaceholder}>
+                      Choose an agent
+                    </Text>
+                  )}
+                  <Ionicons name="chevron-down" size={20} color="#6B7280" />
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Balance Form */}
           <View style={styles.card}>
             <View style={styles.formContainer}>
               <View style={styles.inputGroup}>
@@ -192,6 +337,7 @@ const DailyBalanceScreen = ({ navigation, route }) => {
                 </View>
               </View>
 
+              {/* Difference Calculation */}
               {openingBalance && closingBalance ? (
                 <View style={[
                   styles.differenceContainer,
@@ -232,13 +378,14 @@ const DailyBalanceScreen = ({ navigation, route }) => {
             </View>
           </View>
 
+          {/* Submit Button */}
           <TouchableOpacity
             style={[
               styles.submitButton,
-              (loading || fetchingPrevious || transactionCreated) && styles.disabledButton,
+              (loading || fetchingPrevious || transactionCreated || fetchingAgents) && styles.disabledButton,
             ]}
             onPress={handleSubmit}
-            disabled={loading || fetchingPrevious || transactionCreated}
+            disabled={loading || fetchingPrevious || transactionCreated || fetchingAgents}
             activeOpacity={0.8}
           >
             {loading ? (
@@ -256,6 +403,7 @@ const DailyBalanceScreen = ({ navigation, route }) => {
             )}
           </TouchableOpacity>
 
+          {/* Success Message */}
           {transactionCreated && (
             <View style={styles.successContainer}>
               <MaterialCommunityIcons name="check-circle" size={24} color="#10B981" />
@@ -263,6 +411,7 @@ const DailyBalanceScreen = ({ navigation, route }) => {
             </View>
           )}
 
+          {/* Info Text */}
           <View style={styles.infoContainer}>
             <MaterialCommunityIcons name="information" size={16} color="#6B7280" />
             <Text style={styles.infoText}>
@@ -271,6 +420,51 @@ const DailyBalanceScreen = ({ navigation, route }) => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Agent Selection Modal */}
+      <Modal
+        visible={agentModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setAgentModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Agent</Text>
+              <TouchableOpacity
+                onPress={() => setAgentModalVisible(false)}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            {agents.length === 0 ? (
+              <View style={styles.emptyAgentContainer}>
+                <MaterialCommunityIcons
+                  name="account-off"
+                  size={48}
+                  color="#9CA3AF"
+                />
+                <Text style={styles.emptyAgentText}>No agents available</Text>
+                <Text style={styles.emptyAgentSubtext}>
+                  Please add agents first before creating transactions.
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={agents}
+                renderItem={renderAgentItem}
+                keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+                style={styles.agentList}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.agentListContent}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -352,6 +546,179 @@ const styles = StyleSheet.create({
     color: "#374151",
     fontWeight: "600",
   },
+
+  // Agent Selection Styles
+  agentSection: {
+    marginBottom: 24,
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 12,
+    letterSpacing: 0.2,
+  },
+  agentLoadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 20,
+    backgroundColor: "#EBF8FF",
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: "#DBEAFE",
+  },
+  agentSelector: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: "#E5E7EB",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  agentSelectorContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 44,
+  },
+  selectedAgentDisplay: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  selectedAgentAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#3B82F6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  selectedAgentAvatarText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  selectedAgentInfo: {
+    flex: 1,
+  },
+  selectedAgentName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  selectedAgentEmail: {
+    fontSize: 13,
+    color: "#6B7280",
+  },
+  agentPlaceholder: {
+    fontSize: 16,
+    color: "#9CA3AF",
+    flex: 1,
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 20,
+    maxHeight: "70%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  agentList: {
+    paddingHorizontal: 20,
+  },
+  agentListContent: {
+    paddingBottom: 20,
+  },
+  agentItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  agentItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  agentAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#3B82F6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
+  },
+  agentAvatarText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  agentInfo: {
+    flex: 1,
+  },
+  agentName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
+    marginBottom: 2,
+  },
+  agentEmail: {
+    fontSize: 14,
+    color: "#6B7280",
+  },
+  emptyAgentContainer: {
+    alignItems: "center",
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  emptyAgentText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#9CA3AF",
+    marginTop: 12,
+  },
+  emptyAgentSubtext: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    marginTop: 8,
+    lineHeight: 20,
+  },
+
+  // Form Styles (existing)
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 24,
