@@ -21,7 +21,7 @@ import {
   getDashboardStats,
   getWeeklyStats,
   getMonthlyStats,
-  getAgentsPerformance,
+  getAgents, // Add this import for proper agent fetching
   getDebtorsOverview,
 } from "../services/api";
 import { format } from "date-fns";
@@ -243,10 +243,7 @@ const DashboardScreen = () => {
 
   const [weeklyStats, setWeeklyStats] = useState(null);
   const [monthlyStats, setMonthlyStats] = useState(null);
-  const [agentsPerformance, setAgentsPerformance] = useState({
-    agents_summary: [],
-    summary_stats: {},
-  });
+  const [myAgents, setMyAgents] = useState([]); // Dedicated state for employee's agents
   const [allDebtors, setAllDebtors] = useState([]);
   const [agentBalances, setAgentBalances] = useState({
     totalOpeningBalance: 0,
@@ -311,6 +308,69 @@ const DashboardScreen = () => {
     }
   }, []);
 
+  // NEW: Dedicated function to fetch employee's agents
+  const fetchMyAgents = useCallback(async () => {
+    try {
+      const userData = await getUserData();
+      if (!userData) {
+        console.error("❌ No user data available");
+        return;
+      }
+
+      const headers = {
+        'access-token': userData.userToken,
+        client: userData.client,
+        uid: userData.uid,
+        'Content-Type': 'application/json',
+      };
+
+      console.log('👥 Fetching employee\'s agents...');
+      const agentsData = await getAgents(headers);
+      console.log('📊 Agents data received:', agentsData);
+
+      // Handle different possible response structures
+      const agents = Array.isArray(agentsData) 
+        ? agentsData 
+        : (agentsData.agents || agentsData.data || []);
+
+      const validatedAgents = agents
+        .filter(agent => agent && agent.id)
+        .map(agent => ({
+          ...agent,
+          id: agent.id,
+          name: agent.name || agent.full_name || 'Unknown Agent',
+          type: agent.type || agent.agent_type || 'Agent',
+          phone: agent.phone || agent.phone_number || null,
+          status: agent.status || 'active',
+          opening_balance: parseFloat(agent.opening_balance || 0),
+          closing_balance: parseFloat(agent.closing_balance || agent.balance || 0),
+          total_commissions: parseFloat(agent.total_commissions || agent.commissions || 0),
+          active_debtors: parseInt(agent.active_debtors || agent.debtors_count || 0),
+          created_at: agent.created_at || new Date().toISOString(),
+          updated_at: agent.updated_at || new Date().toISOString(),
+        }));
+
+      setMyAgents(validatedAgents);
+
+      // Calculate agent balances for dashboard metrics
+      if (validatedAgents.length > 0) {
+        const totalOpeningBalance = validatedAgents.reduce((sum, agent) => sum + (agent.opening_balance || 0), 0);
+        const totalClosingBalance = validatedAgents.reduce((sum, agent) => sum + (agent.closing_balance || 0), 0);
+        
+        setAgentBalances({
+          totalOpeningBalance,
+          totalClosingBalance,
+          agentCount: validatedAgents.length,
+        });
+      }
+
+      console.log(`✅ Processed ${validatedAgents.length} agents for employee`);
+    } catch (error) {
+      console.error("❌ Error fetching employee's agents:", error);
+      Alert.alert("Error", error.message || "Failed to load agents");
+    }
+  }, []);
+
   const fetchWeeklyStats = useCallback(async () => {
     try {
       const userData = await getUserData();
@@ -345,35 +405,6 @@ const DashboardScreen = () => {
     }
   }, []);
 
-  const fetchAgentsPerformance = useCallback(async () => {
-    try {
-      const userData = await getUserData();
-      const headers = {
-        "access-token": userData.userToken,
-        client: userData.client,
-        uid: userData.uid,
-        "Content-Type": "application/json",
-      };
-      
-      const data = await getAgentsPerformance(headers);
-      setAgentsPerformance(data);
-      
-      // Calculate agent balances
-      if (data.agents_summary) {
-        const totalOpeningBalance = data.agents_summary.reduce((sum, agent) => sum + (agent.opening_balance || 0), 0);
-        const totalClosingBalance = data.agents_summary.reduce((sum, agent) => sum + (agent.closing_balance || 0), 0);
-        
-        setAgentBalances({
-          totalOpeningBalance,
-          totalClosingBalance,
-          agentCount: data.agents_summary.length,
-        });
-      }
-    } catch (error) {
-      console.error("❌ Error fetching agents performance:", error);
-    }
-  }, []);
-
   const fetchAllDebtors = useCallback(async () => {
     try {
       const userData = await getUserData();
@@ -389,9 +420,8 @@ const DashboardScreen = () => {
         "Content-Type": "application/json",
       };
       
-      console.log('👥 Fetching all debtors...');
+      console.log('👥 Fetching all debtors managed by employee...');
       
-      // Check if the function exists before calling
       if (typeof getDebtorsOverview !== 'function') {
         console.error("❌ getDebtorsOverview is not a function:", typeof getDebtorsOverview);
         Alert.alert("Error", "Debtors overview function not available");
@@ -401,7 +431,6 @@ const DashboardScreen = () => {
       const response = await getDebtorsOverview(headers);
       console.log('📊 Debtors overview received:', response);
       
-      // Handle the data structure similar to DebtOverviewScreen
       const debtSummary = response?.debt_summary || [];
       const validatedDebtors = Array.isArray(debtSummary)
         ? debtSummary
@@ -417,11 +446,12 @@ const DashboardScreen = () => {
                 created_at: item.created_at || new Date().toISOString(),
                 debtor_name: item.debtor_name || "Unknown Debtor",
                 phone: item.phone || null,
+                agent_name: item.agent_name || 'Unknown Agent', // Track which agent manages this debtor
                 // Map to common fields for compatibility
                 name: item.debtor_name || "Unknown Debtor",
                 total_debt: parseFloat(item.balance_due || 0),
                 amount: parseFloat(item.balance_due || 0),
-                total_paid: 0, // This might need to be calculated differently
+                total_paid: 0,
                 amount_paid: 0,
                 status: item.balance_due > 0 ? 'active' : 'paid',
                 is_fully_paid: item.balance_due <= 0,
@@ -431,7 +461,7 @@ const DashboardScreen = () => {
         : [];
       
       setAllDebtors(validatedDebtors);
-      console.log('✅ Processed debtors:', validatedDebtors.length);
+      console.log(`✅ Processed ${validatedDebtors.length} debtors managed by employee`);
     } catch (error) {
       console.error("❌ Error fetching all debtors:", error);
       Alert.alert("Error", error.message || "Failed to load debtors");
@@ -443,9 +473,9 @@ const DashboardScreen = () => {
       setLoading(true);
       await Promise.all([
         fetchDashboardData(),
+        fetchMyAgents(), // Use dedicated agent fetching
         fetchWeeklyStats(),
         fetchMonthlyStats(),
-        fetchAgentsPerformance(),
         fetchAllDebtors(),
       ]);
     } catch (error) {
@@ -453,7 +483,7 @@ const DashboardScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [fetchDashboardData, fetchWeeklyStats, fetchMonthlyStats, fetchAgentsPerformance, fetchAllDebtors]);
+  }, [fetchDashboardData, fetchMyAgents, fetchWeeklyStats, fetchMonthlyStats, fetchAllDebtors]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -473,7 +503,8 @@ const DashboardScreen = () => {
   useFocusEffect(
     useCallback(() => {
       fetchDashboardData();
-    }, [fetchDashboardData])
+      fetchMyAgents(); // Refresh agents when screen is focused
+    }, [fetchDashboardData, fetchMyAgents])
   );
 
   const toggleMenu = useCallback(() => {
@@ -511,13 +542,13 @@ const DashboardScreen = () => {
       balanceChart: [
         { label: 'Employee Opening', value: dailyStats.openingBalance, displayValue: formatCurrency(dailyStats.openingBalance) },
         { label: 'Employee Closing', value: dailyStats.closingBalance, displayValue: formatCurrency(dailyStats.closingBalance) },
-        { label: 'Agent Opening', value: agentBalances.totalOpeningBalance, displayValue: formatCurrency(agentBalances.totalOpeningBalance) },
-        { label: 'Agent Closing', value: agentBalances.totalClosingBalance, displayValue: formatCurrency(agentBalances.totalClosingBalance) },
+        { label: 'Agents Opening', value: agentBalances.totalOpeningBalance, displayValue: formatCurrency(agentBalances.totalOpeningBalance) },
+        { label: 'Agents Closing', value: agentBalances.totalClosingBalance, displayValue: formatCurrency(agentBalances.totalClosingBalance) },
       ],
       transactionChart: [
-        { label: 'Employee', value: dailyStats.employeeTransactions, displayValue: dailyStats.employeeTransactions.toString() },
-        { label: 'Agent', value: dailyStats.agentTransactions, displayValue: dailyStats.agentTransactions.toString() },
-        { label: 'Total', value: dailyStats.employeeTransactions + dailyStats.agentTransactions, displayValue: (dailyStats.employeeTransactions + dailyStats.agentTransactions).toString() },
+        { label: 'Employee Performed', value: dailyStats.employeeTransactions, displayValue: dailyStats.employeeTransactions.toString() },
+        { label: 'For Agents', value: dailyStats.agentTransactions, displayValue: dailyStats.agentTransactions.toString() },
+        { label: 'Total Managed', value: dailyStats.employeeTransactions + dailyStats.agentTransactions, displayValue: (dailyStats.employeeTransactions + dailyStats.agentTransactions).toString() },
       ],
       debtChart: [
         { label: 'Outstanding', value: quickStats.totalDebtOutstanding, displayValue: formatCurrency(quickStats.totalDebtOutstanding) },
@@ -539,19 +570,19 @@ const DashboardScreen = () => {
       ],
       debtorDistribution: [
         {
-          label: 'High Debt (>TSh 1M)',
+          label: 'High Risk (>TSh 1M)',
           value: allDebtors.filter(d => d.balance_due > 1000000).length,
           displayValue: allDebtors.filter(d => d.balance_due > 1000000).length.toString(),
           color: '#DC2626'
         },
         {
-          label: 'Medium Debt (>TSh 500K)',
+          label: 'Medium Risk (>TSh 500K)',
           value: allDebtors.filter(d => d.balance_due > 500000 && d.balance_due <= 1000000).length,
           displayValue: allDebtors.filter(d => d.balance_due > 500000 && d.balance_due <= 1000000).length.toString(),
           color: '#F59E0B'
         },
         {
-          label: 'Low Debt (≤TSh 500K)',
+          label: 'Low Risk (≤TSh 500K)',
           value: allDebtors.filter(d => d.balance_due <= 500000).length,
           displayValue: allDebtors.filter(d => d.balance_due <= 500000).length.toString(),
           color: '#10B981'
@@ -572,7 +603,7 @@ const DashboardScreen = () => {
         },
       ],
     };
-  }, [dashboardData, formatCurrency, agentBalances]);
+  }, [dashboardData, formatCurrency, agentBalances, allDebtors]);
 
   // Calculate debt collection rate
   const debtCollectionRate = useMemo(() => {
@@ -586,7 +617,7 @@ const DashboardScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6366F1" />
-          <Text style={styles.loadingText}>Loading Dashboard...</Text>
+          <Text style={styles.loadingText}>Loading Employee Dashboard...</Text>
         </View>
       </SafeAreaView>
     );
@@ -605,8 +636,8 @@ const DashboardScreen = () => {
         </TouchableOpacity>
         
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Dashboard</Text>
-          <Text style={styles.headerSubtitle}>Welcome back, {user?.name?.split(' ')[0]}</Text>
+          <Text style={styles.headerTitle}>Agent Manager Dashboard</Text>
+          <Text style={styles.headerSubtitle}>Managing {myAgents.length} agents • {user?.name?.split(' ')[0]}</Text>
         </View>
 
         <TouchableOpacity onPress={logout} style={styles.logoutButton}>
@@ -638,10 +669,10 @@ const DashboardScreen = () => {
                 </View>
                 <View style={styles.profileInfo}>
                   <Text style={styles.profileName}>{user?.name || 'User'}</Text>
-                  <Text style={styles.profileRole}>Employee</Text>
+                  <Text style={styles.profileRole}>Agent Manager</Text>
                   <View style={styles.profileStatusIndicator}>
                     <View style={styles.statusDotOnline} />
-                    <Text style={styles.profileStatus}>Online</Text>
+                    <Text style={styles.profileStatus}>Managing {myAgents.length} agents</Text>
                   </View>
                 </View>
               </View>
@@ -653,14 +684,14 @@ const DashboardScreen = () => {
 
             {/* Menu Items */}
             <View style={styles.menuItemsContainer}>
-              <Text style={styles.menuSectionTitle}>NAVIGATION</Text>
+              <Text style={styles.menuSectionTitle}>AGENT MANAGEMENT</Text>
               
               {[
                 { screen: "Dashboard", icon: "dashboard", label: "Dashboard", isActive: true },
-                { screen: "Transactions", icon: "receipt", label: "Transactions", badge: dailyStats.employeeTransactions + dailyStats.agentTransactions },
-                { screen: "Agents", icon: "people", label: "My Agents", badge: quickStats.totalAgents },
+                { screen: "Transactions", icon: "receipt", label: "Agent Transactions", badge: dailyStats.agentTransactions },
+                { screen: "Agents", icon: "people", label: "My Agents", badge: myAgents.length },
                 { screen: "Commissions", icon: "attach-money", label: "Commissions" },
-                { screen: "Debtors", icon: "account-balance", label: "Debtors", badge: quickStats.activeDebtors },
+                { screen: "Debtors", icon: "account-balance", label: "Managed Debtors", badge: quickStats.activeDebtors },
               ].map((item, index) => (
                 <TouchableOpacity
                   key={item.screen}
@@ -709,31 +740,31 @@ const DashboardScreen = () => {
 
             {/* Quick Stats Section */}
             <View style={styles.menuStatsSection}>
-              <Text style={styles.menuSectionTitle}>TODAY'S SUMMARY</Text>
+              <Text style={styles.menuSectionTitle}>AGENTS SUMMARY</Text>
               
               <View style={styles.menuStatItem}>
                 <View style={styles.menuStatIcon}>
                   <Icon name="account-balance-wallet" size={16} color="#10B981" />
                 </View>
                 <View style={styles.menuStatContent}>
-                  <Text style={styles.menuStatLabel}>Net Change</Text>
+                  <Text style={styles.menuStatLabel}>Employee Balance</Text>
                   <Text style={[
                     styles.menuStatValue,
                     { color: dailyStats.netChange >= 0 ? '#10B981' : '#EF4444' }
                   ]}>
-                    {dailyStats.netChange >= 0 ? '+' : ''}{formatCurrency(dailyStats.netChange)}
+                    {formatCurrency(dailyStats.closingBalance)}
                   </Text>
                 </View>
               </View>
 
               <View style={styles.menuStatItem}>
                 <View style={styles.menuStatIcon}>
-                  <Icon name="attach-money" size={16} color="#6366F1" />
+                  <Icon name="people" size={16} color="#6366F1" />
                 </View>
                 <View style={styles.menuStatContent}>
-                  <Text style={styles.menuStatLabel}>Commissions</Text>
+                  <Text style={styles.menuStatLabel}>Agents Total Balance</Text>
                   <Text style={styles.menuStatValue}>
-                    {formatCurrency(dailyStats.totalCommissions)}
+                    {formatCurrency(agentBalances.totalClosingBalance)}
                   </Text>
                 </View>
               </View>
@@ -772,8 +803,8 @@ const DashboardScreen = () => {
         {[
           { key: 'overview', label: 'Overview', icon: 'dashboard' },
           { key: 'analytics', label: 'Analytics', icon: 'analytics' },
-          { key: 'agents', label: 'Agents', icon: 'people' },
-          { key: 'debtors', label: 'Debtors', icon: 'account-balance' },
+          { key: 'agents', label: 'My Agents', icon: 'people' },
+          { key: 'debtors', label: 'Managed Debtors', icon: 'account-balance' },
         ].map((tab) => (
           <TouchableOpacity
             key={tab.key}
@@ -818,12 +849,37 @@ const DashboardScreen = () => {
                 </View>
               </View>
 
-              {/* Balance Overview */}
+              {/* Agent Management Overview */}
               <View style={styles.fullWidthCard}>
-                <Text style={styles.cardTitle}>Today's Balance Overview</Text>
+                <Text style={styles.cardTitle}>Agent Management Overview</Text>
                 
-                {/* Employee Balances */}
-                <Text style={styles.subSectionTitle}>Employee Balance</Text>
+                <View style={styles.managementSummary}>
+                  <View style={styles.managementItem}>
+                    <Icon name="people" size={24} color="#6366F1" />
+                    <Text style={styles.managementValue}>{myAgents.length}</Text>
+                    <Text style={styles.managementLabel}>Agents Under Management</Text>
+                  </View>
+                  
+                  <View style={styles.managementItem}>
+                    <Icon name="account-balance" size={24} color="#EF4444" />
+                    <Text style={styles.managementValue}>{allDebtors.length}</Text>
+                    <Text style={styles.managementLabel}>Total Debtors Managed</Text>
+                  </View>
+                  
+                  <View style={styles.managementItem}>
+                    <Icon name="attach-money" size={24} color="#10B981" />
+                    <Text style={styles.managementValue}>{formatCurrency(agentBalances.totalClosingBalance)}</Text>
+                    <Text style={styles.managementLabel}>Agents Total Balance</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Balance Overview - Employee vs Agents */}
+              <View style={styles.fullWidthCard}>
+                <Text style={styles.cardTitle}>Balance Comparison: Employee vs Managed Agents</Text>
+                
+                {/* Employee Balance */}
+                <Text style={styles.subSectionTitle}>Employee Balance (You)</Text>
                 <View style={styles.balanceRow}>
                   <View style={styles.balanceItem}>
                     <Text style={styles.balanceLabel}>Opening</Text>
@@ -838,8 +894,8 @@ const DashboardScreen = () => {
                   </View>
                 </View>
                 
-                {/* Agent Balances */}
-                <Text style={styles.subSectionTitle}>Agents Total Balance</Text>
+                {/* Agents Combined Balance */}
+                <Text style={styles.subSectionTitle}>Agents Combined Balance ({myAgents.length} agents)</Text>
                 <View style={styles.balanceRow}>
                   <View style={styles.balanceItem}>
                     <Text style={styles.balanceLabel}>Opening</Text>
@@ -875,24 +931,24 @@ const DashboardScreen = () => {
                 </View>
               </View>
 
-              {/* Key Metrics Grid */}
+              {/* Transaction Management Metrics */}
               <View style={styles.metricsGrid}>
                 <View style={styles.metricCard}>
-                  <Icon name="receipt" size={24} color="#6366F1" />
-                  <Text style={styles.metricValue}>{dailyStats.employeeTransactions + dailyStats.agentTransactions}</Text>
-                  <Text style={styles.metricLabel}>Total Transactions</Text>
+                  <Icon name="person" size={24} color="#6366F1" />
+                  <Text style={styles.metricValue}>{dailyStats.employeeTransactions}</Text>
+                  <Text style={styles.metricLabel}>Employee Transactions</Text>
                 </View>
                 
                 <View style={styles.metricCard}>
-                  <Icon name="attach-money" size={24} color="#10B981" />
+                  <Icon name="group" size={24} color="#10B981" />
+                  <Text style={styles.metricValue}>{dailyStats.agentTransactions}</Text>
+                  <Text style={styles.metricLabel}>Agent Transactions</Text>
+                </View>
+                
+                <View style={styles.metricCard}>
+                  <Icon name="attach-money" size={24} color="#F59E0B" />
                   <Text style={styles.metricValue}>{formatCurrency(dailyStats.totalCommissions)}</Text>
-                  <Text style={styles.metricLabel}>Commissions</Text>
-                </View>
-                
-                <View style={styles.metricCard}>
-                  <Icon name="people" size={24} color="#F59E0B" />
-                  <Text style={styles.metricValue}>{quickStats.totalAgents}</Text>
-                  <Text style={styles.metricLabel}>Total Agents</Text>
+                  <Text style={styles.metricLabel}>Total Commissions</Text>
                 </View>
                 
                 <View style={styles.metricCard}>
@@ -902,16 +958,16 @@ const DashboardScreen = () => {
                 </View>
               </View>
 
-              {/* Quick Actions */}
+              {/* Quick Actions for Agent Management */}
               <View style={styles.fullWidthCard}>
-                <Text style={styles.cardTitle}>Quick Actions</Text>
+                <Text style={styles.cardTitle}>Agent Management Actions</Text>
                 <View style={styles.actionsRow}>
                   <TouchableOpacity 
                     style={[styles.actionButton, { backgroundColor: '#6366F1' }]}
                     onPress={() => navigation.navigate("RecordTransaction")}
                   >
                     <Icon name="add" size={20} color="#FFFFFF" />
-                    <Text style={styles.actionButtonText}>Record Transaction</Text>
+                    <Text style={styles.actionButtonText}>Record Agent Transaction</Text>
                   </TouchableOpacity>
                   
                   <TouchableOpacity 
@@ -919,7 +975,7 @@ const DashboardScreen = () => {
                     onPress={() => navigation.navigate("CreateAgent")}
                   >
                     <Icon name="person-add" size={20} color="#FFFFFF" />
-                    <Text style={styles.actionButtonText}>Add Agent</Text>
+                    <Text style={styles.actionButtonText}>Add New Agent</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -927,7 +983,7 @@ const DashboardScreen = () => {
               {/* Recent Activity */}
               <View style={styles.fullWidthCard}>
                 <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>Recent Activity</Text>
+                  <Text style={styles.cardTitle}>Recent Agent Activity</Text>
                   <TouchableOpacity onPress={() => navigation.navigate("Activity")}>
                     <Text style={styles.seeAllText}>See All</Text>
                   </TouchableOpacity>
@@ -960,7 +1016,7 @@ const DashboardScreen = () => {
                 ) : (
                   <View style={styles.emptyState}>
                     <Icon name="inbox" size={48} color="#D1D5DB" />
-                    <Text style={styles.emptyStateText}>No recent activity</Text>
+                    <Text style={styles.emptyStateText}>No recent agent activity</Text>
                   </View>
                 )}
               </View>
@@ -970,27 +1026,27 @@ const DashboardScreen = () => {
           {/* Analytics Tab */}
           {activeTab === 'analytics' && (
             <>
-              {/* Balance Chart */}
+              {/* Employee vs Agents Balance Chart */}
               <View style={styles.fullWidthCard}>
                 <SimpleBarChart 
                   data={chartData.balanceChart}
-                  title="Balance Overview (Employee vs Agents)"
+                  title="Balance Comparison: Employee vs Managed Agents"
                   color="#6366F1"
                 />
               </View>
 
-              {/* Transaction Chart */}
+              {/* Transaction Management Chart */}
               <View style={styles.fullWidthCard}>
                 <SimpleBarChart 
                   data={chartData.transactionChart}
-                  title="Transaction Breakdown"
+                  title="Transaction Management Overview"
                   color="#10B981"
                 />
               </View>
 
-              {/* Debt Collection Progress with Enhanced Progress Ring */}
+              {/* Debt Collection Progress */}
               <View style={styles.fullWidthCard}>
-                <Text style={styles.cardTitle}>Debt Collection Progress</Text>
+                <Text style={styles.cardTitle}>Debt Collection Progress (All Managed Debtors)</Text>
                 <View style={styles.progressContainer}>
                   <ProgressRing 
                     progress={debtCollectionRate}
@@ -1016,67 +1072,21 @@ const DashboardScreen = () => {
                 </View>
               </View>
 
-              {/* Debt Management Pie Chart */}
+              {/* Managed Debt Distribution */}
               <View style={styles.fullWidthCard}>
                 <ModernPieChart 
                   data={chartData.pieChartData}
-                  title="Debt Distribution"
+                  title="Managed Debt Distribution"
                   size={180}
                 />
               </View>
 
-              {/* Agent Status Pie Chart */}
+              {/* Agent Performance Overview */}
               <View style={styles.fullWidthCard}>
-                <ModernPieChart 
-                  data={chartData.agentStatusPie}
-                  title="Agent Update Status"
-                  size={160}
-                />
-              </View>
-
-              {/* Debt Chart */}
-              <View style={styles.fullWidthCard}>
-                <SimpleBarChart 
-                  data={chartData.debtChart}
-                  title="Debt Management"
-                  color="#EF4444"
-                />
-              </View>
-
-              {/* Weekly vs Monthly Stats */}
-              {weeklyStats && monthlyStats && (
-                <View style={styles.fullWidthCard}>
-                  <Text style={styles.cardTitle}>Performance Comparison</Text>
-                  <View style={styles.comparisonRow}>
-                    <View style={styles.comparisonItem}>
-                      <Text style={styles.comparisonLabel}>Weekly</Text>
-                      <Text style={styles.comparisonValue}>
-                        {weeklyStats.transactions_last_7_days || 0} transactions
-                      </Text>
-                      <Text style={styles.comparisonSubvalue}>
-                        {formatCurrency(weeklyStats.commissions_last_7_days || 0)} commissions
-                      </Text>
-                    </View>
-                    <View style={styles.comparisonDivider} />
-                    <View style={styles.comparisonItem}>
-                      <Text style={styles.comparisonLabel}>Monthly</Text>
-                      <Text style={styles.comparisonValue}>
-                        {monthlyStats.transactions_this_month || 0} transactions
-                      </Text>
-                      <Text style={styles.comparisonSubvalue}>
-                        {formatCurrency(monthlyStats.commissions_this_month || 0)} commissions
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-
-              {/* Agent Balance Summary */}
-              <View style={styles.fullWidthCard}>
-                <Text style={styles.cardTitle}>Agent Balance Summary</Text>
+                <Text style={styles.cardTitle}>My Agents Performance</Text>
                 <View style={styles.summaryRow}>
                   <View style={styles.summaryItem}>
-                    <Text style={styles.summaryValue}>{agentBalances.agentCount}</Text>
+                    <Text style={styles.summaryValue}>{myAgents.length}</Text>
                     <Text style={styles.summaryLabel}>Total Agents</Text>
                   </View>
                   <View style={styles.summaryItem}>
@@ -1096,66 +1106,92 @@ const DashboardScreen = () => {
             </>
           )}
 
-          {/* Agents Tab */}
+          {/* My Agents Tab */}
           {activeTab === 'agents' && (
             <>
               {/* Agents Summary */}
               <View style={styles.fullWidthCard}>
-                <Text style={styles.cardTitle}>Agents Overview</Text>
+                <Text style={styles.cardTitle}>My Agents Overview</Text>
                 <View style={styles.summaryRow}>
                   <View style={styles.summaryItem}>
-                    <Text style={styles.summaryValue}>{agentsSummary.summary.totalAgents}</Text>
+                    <Text style={styles.summaryValue}>{myAgents.length}</Text>
                     <Text style={styles.summaryLabel}>Total Agents</Text>
                   </View>
                   <View style={styles.summaryItem}>
-                    <Text style={styles.summaryValue}>{agentsSummary.summary.agentsWithUpdatesToday}</Text>
-                    <Text style={styles.summaryLabel}>Updated Today</Text>
+                    <Text style={styles.summaryValue}>
+                      {formatCurrency(agentBalances.totalClosingBalance)}
+                    </Text>
+                    <Text style={styles.summaryLabel}>Combined Balance</Text>
                   </View>
                   <View style={styles.summaryItem}>
-                    <Text style={styles.summaryValue}>{agentsSummary.summary.totalActiveDebtors}</Text>
+                    <Text style={styles.summaryValue}>
+                      {allDebtors.length}
+                    </Text>
                     <Text style={styles.summaryLabel}>Total Debtors</Text>
                   </View>
                 </View>
               </View>
 
-              {/* Agents List */}
-              {agentsSummary.agents.length > 0 ? (
+              {/* My Agents List */}
+              {myAgents.length > 0 ? (
                 <FlatList
-                  data={agentsSummary.agents}
+                  data={myAgents}
                   renderItem={({ item }) => (
                     <View style={styles.fullWidthCard}>
                       <View style={styles.agentHeader}>
                         <View>
                           <Text style={styles.agentName}>{item.name}</Text>
                           <Text style={styles.agentType}>{item.type || 'Agent'}</Text>
+                          {item.phone && (
+                            <Text style={styles.agentPhone}>{item.phone}</Text>
+                          )}
                         </View>
                         <View style={[
                           styles.agentStatus,
-                          { backgroundColor: item.status === 'updated_today' ? '#10B981' : '#EF4444' }
+                          { backgroundColor: item.status === 'active' ? '#10B981' : '#EF4444' }
                         ]}>
                           <Text style={styles.agentStatusText}>
-                            {item.status === 'updated_today' ? 'Updated' : 'Pending'}
+                            {item.status === 'active' ? 'Active' : 'Inactive'}
                           </Text>
                         </View>
                       </View>
                       
                       <View style={styles.agentMetrics}>
                         <View style={styles.agentMetric}>
-                          <Text style={styles.agentMetricLabel}>Balance</Text>
+                          <Text style={styles.agentMetricLabel}>Opening Balance</Text>
                           <Text style={styles.agentMetricValue}>
-                            {formatCurrency(item.latest_balance || 0)}
+                            {formatCurrency(item.opening_balance || 0)}
                           </Text>
                         </View>
                         <View style={styles.agentMetric}>
-                          <Text style={styles.agentMetricLabel}>Commissions</Text>
-                          <Text style={styles.agentMetricValue}>
-                            {formatCurrency(item.total_commissions || 0)}
+                          <Text style={styles.agentMetricLabel}>Current Balance</Text>
+                          <Text style={[
+                            styles.agentMetricValue,
+                            { color: '#10B981' }
+                          ]}>
+                            {formatCurrency(item.closing_balance || 0)}
                           </Text>
                         </View>
                         <View style={styles.agentMetric}>
                           <Text style={styles.agentMetricLabel}>Debtors</Text>
                           <Text style={styles.agentMetricValue}>{item.active_debtors || 0}</Text>
                         </View>
+                      </View>
+
+                      {/* Agent Net Change */}
+                      <View style={styles.agentNetChange}>
+                        <Text style={styles.agentNetChangeLabel}>Net Change:</Text>
+                        <Text style={[
+                          styles.agentNetChangeValue,
+                          { 
+                            color: ((item.closing_balance || 0) - (item.opening_balance || 0)) >= 0 
+                              ? '#10B981' 
+                              : '#EF4444' 
+                          }
+                        ]}>
+                          {((item.closing_balance || 0) - (item.opening_balance || 0)) >= 0 ? '+' : ''}
+                          {formatCurrency((item.closing_balance || 0) - (item.opening_balance || 0))}
+                        </Text>
                       </View>
                     </View>
                   )}
@@ -1167,18 +1203,29 @@ const DashboardScreen = () => {
                   <View style={styles.emptyState}>
                     <Icon name="people" size={48} color="#D1D5DB" />
                     <Text style={styles.emptyStateText}>No agents found</Text>
+                    <Text style={styles.emptyStateSubtext}>
+                      Add agents to start managing their transactions and debtors
+                    </Text>
+                    <TouchableOpacity 
+                      style={styles.emptyStateButton}
+                      onPress={() => navigation.navigate("CreateAgent")}
+                    >
+                      <Icon name="person-add" size={20} color="#FFFFFF" />
+                      <Text style={styles.emptyStateButtonText}>Add First Agent</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               )}
             </>
           )}
 
-          {/* Debtors Tab */}
+          {/* Managed Debtors Tab */}
           {activeTab === 'debtors' && (
             <>
               {/* Debtors Summary */}
               <View style={styles.fullWidthCard}>
-                <Text style={styles.cardTitle}>Debt Overview</Text>
+                <Text style={styles.cardTitle}>Managed Debtors Overview</Text>
+                <Text style={styles.cardSubtitle}>All debtors managed through your agents</Text>
                 <View style={styles.summaryRow}>
                   <View style={styles.summaryItem}>
                     <Text style={styles.summaryValue}>{allDebtors.length}</Text>
@@ -1199,7 +1246,7 @@ const DashboardScreen = () => {
                 </View>
               </View>
 
-              {/* Debt Distribution by Severity */}
+              {/* Risk Distribution */}
               <View style={styles.fullWidthCard}>
                 <ModernPieChart 
                   data={chartData.debtorDistribution}
@@ -1208,30 +1255,21 @@ const DashboardScreen = () => {
                 />
               </View>
 
-              {/* Debt Distribution Chart */}
-              <View style={styles.fullWidthCard}>
-                <ModernPieChart 
-                  data={chartData.pieChartData}
-                  title="Debt Distribution Overview"
-                  size={180}
-                />
-              </View>
-
-              {/* All Debtors List */}
+              {/* All Managed Debtors List */}
               {allDebtors.length > 0 ? (
                 <>
                   <View style={styles.fullWidthCard}>
-                    <Text style={styles.cardTitle}>All Debtors ({allDebtors.length})</Text>
+                    <Text style={styles.cardTitle}>All Managed Debtors ({allDebtors.length})</Text>
+                    <Text style={styles.cardSubtitle}>Debtors managed through your agents</Text>
                   </View>
                   
                   <FlatList
                     data={allDebtors}
                     renderItem={({ item }) => {
-                      // Get debt severity like in DebtorItem
                       const getDebtSeverity = (amount) => {
-                        if (amount > 1000000) return { color: "#DC2626", label: "High" }; // > 1M TSh
-                        if (amount > 500000) return { color: "#F59E0B", label: "Medium" }; // > 500K TSh
-                        return { color: "#10B981", label: "Low" };
+                        if (amount > 1000000) return { color: "#DC2626", label: "High Risk" };
+                        if (amount > 500000) return { color: "#F59E0B", label: "Medium Risk" };
+                        return { color: "#10B981", label: "Low Risk" };
                       };
                       
                       const debtSeverity = getDebtSeverity(item.balance_due);
@@ -1254,6 +1292,11 @@ const DashboardScreen = () => {
                               <Text style={styles.debtorPhone}>
                                 {item.phone || item.phone_number || 'No phone'}
                               </Text>
+                              {item.agent_name && (
+                                <Text style={styles.debtorAgent}>
+                                  Managed by: {item.agent_name}
+                                </Text>
+                              )}
                               {item.created_at && (
                                 <Text style={styles.debtorDate}>
                                   Created: {new Date(item.created_at).toLocaleDateString('en-US', {
@@ -1282,13 +1325,13 @@ const DashboardScreen = () => {
                               </Text>
                             </View>
                             <View style={styles.debtorMetric}>
-                              <Text style={styles.debtorMetricLabel}>Severity</Text>
+                              <Text style={styles.debtorMetricLabel}>Risk Level</Text>
                               <Text style={[styles.debtorMetricValue, { color: debtSeverity.color }]}>
-                                {debtSeverity.label}
+                                {debtSeverity.label.split(' ')[0]}
                               </Text>
                             </View>
                             <View style={styles.debtorMetric}>
-                              <Text style={styles.debtorMetricLabel}>Days</Text>
+                              <Text style={styles.debtorMetricLabel}>Days Outstanding</Text>
                               <Text style={styles.debtorMetricValue}>
                                 {item.created_at 
                                   ? Math.floor((new Date() - new Date(item.created_at)) / (1000 * 60 * 60 * 24))
@@ -1296,41 +1339,6 @@ const DashboardScreen = () => {
                               </Text>
                             </View>
                           </View>
-
-                          {/* Progress Bar - if there's payment history */}
-                          {(item.total_debt || item.amount) && (
-                            <View style={styles.progressBarContainer}>
-                              <View style={styles.progressBarTrack}>
-                                <View
-                                  style={[
-                                    styles.progressBarFill,
-                                    { 
-                                      width: `${
-                                        (item.total_debt || item.amount) > 0 
-                                          ? (((item.total_paid || item.amount_paid || 0) / (item.total_debt || item.amount)) * 100) 
-                                          : 0
-                                      }%` 
-                                    }
-                                  ]}
-                                />
-                              </View>
-                              <Text style={styles.progressBarText}>
-                                {(item.total_debt || item.amount) > 0 
-                                  ? (((item.total_paid || item.amount_paid || 0) / (item.total_debt || item.amount)) * 100).toFixed(1) 
-                                  : 0}% paid
-                              </Text>
-                            </View>
-                          )}
-
-                          {/* Additional Details */}
-                          {(item.description || item.purpose) && (
-                            <View style={styles.debtorDescription}>
-                              <Text style={styles.debtorDescriptionLabel}>Description:</Text>
-                              <Text style={styles.debtorDescriptionText}>
-                                {item.description || item.purpose}
-                              </Text>
-                            </View>
-                          )}
 
                           {/* Quick Action Buttons */}
                           <View style={styles.debtorActions}>
@@ -1365,7 +1373,7 @@ const DashboardScreen = () => {
                     <Icon name="account-balance" size={48} color="#D1D5DB" />
                     <Text style={styles.emptyStateText}>No debtors found</Text>
                     <Text style={styles.emptyStateSubtext}>
-                      Debtors will appear here when they are added
+                      Debtors will appear here when your agents add them
                     </Text>
                   </View>
                 </View>
@@ -1415,12 +1423,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#FFFFFF',
   },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#D1D5DB',
     marginTop: 2,
   },
@@ -1759,6 +1767,12 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginBottom: 16,
   },
+  cardSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 16,
+    marginTop: -8,
+  },
   subSectionTitle: {
     fontSize: 16,
     fontWeight: '600',
@@ -1776,6 +1790,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6366F1',
     fontWeight: '600',
+  },
+  managementSummary: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  managementItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  managementValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  managementLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+    fontWeight: '500',
   },
   balanceRow: {
     flexDirection: 'row',
@@ -1911,6 +1946,28 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontWeight: '500',
     marginTop: 12,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  emptyStateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6366F1',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  emptyStateButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginLeft: 8,
   },
   
   // Chart Styles
@@ -2145,12 +2202,7 @@ const styles = StyleSheet.create({
     color: '#6366F1',
     marginLeft: 4,
   },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    marginTop: 4,
-  },
+
   progressContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2171,38 +2223,6 @@ const styles = StyleSheet.create({
   progressDetailValue: {
     fontSize: 16,
     fontWeight: '700',
-  },
-
-  // Comparison Styles
-  comparisonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  comparisonItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  comparisonDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 16,
-  },
-  comparisonLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  comparisonValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 2,
-  },
-  comparisonSubvalue: {
-    fontSize: 12,
-    color: '#6B7280',
   },
 
   // Summary Styles
@@ -2242,6 +2262,11 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 2,
   },
+  agentPhone: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 1,
+  },
   agentStatus: {
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -2269,6 +2294,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#111827',
   },
+  agentNetChange: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  agentNetChangeLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  agentNetChangeValue: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
 
   // Debtor Styles
   debtorHeader: {
@@ -2291,6 +2334,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#9CA3AF',
     marginTop: 1,
+    fontStyle: 'italic',
   },
   debtorStatus: {
     paddingHorizontal: 8,
@@ -2320,28 +2364,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#111827',
   },
-  progressBarContainer: {
-    marginTop: 8,
-  },
-  progressBarTrack: {
-    height: 6,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 3,
-    marginBottom: 4,
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#10B981',
-    borderRadius: 3,
-  },
-  progressBarText: {
-    fontSize: 11,
-    color: '#6B7280',
-    textAlign: 'right',
-  },
+
   bottomSpacing: {
     height: 32,
   },
 });
 
 export default DashboardScreen;
+
+
