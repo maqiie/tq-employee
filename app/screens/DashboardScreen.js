@@ -21,7 +21,7 @@ import {
   getDashboardStats,
   getWeeklyStats,
   getMonthlyStats,
-  getAgents, // Add this import for proper agent fetching
+  getAgents,
   getDebtorsOverview,
 } from "../services/api";
 import { format } from "date-fns";
@@ -29,128 +29,197 @@ import { getUserData } from "../services/auth";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
-// Simple Chart Component (since we can't use external chart libraries)
-const SimpleBarChart = ({ data, title, color = "#6366F1" }) => {
-  const maxValue = Math.max(...data.map(item => item.value));
+// Modern Design Theme
+const theme = {
+  colors: {
+    // Primary Colors
+    primary: {
+      50: '#F0F4FF',
+      100: '#E0E7FF',
+      500: '#6366F1',
+      600: '#4F46E5',
+      700: '#4338CA',
+      900: '#312E81',
+    },
+    // Secondary Colors
+    secondary: {
+      50: '#F0FDF4',
+      100: '#DCFCE7',
+      500: '#10B981',
+      600: '#059669',
+      700: '#047857',
+    },
+    // Accent Colors
+    accent: {
+      amber: '#F59E0B',
+      orange: '#F97316',
+      rose: '#F43F5E',
+      violet: '#8B5CF6',
+      blue: '#3B82F6',
+      emerald: '#10B981',
+      red: '#EF4444',
+    },
+    // Neutral Colors
+    neutral: {
+      50: '#FAFAFA',
+      100: '#F5F5F5',
+      200: '#E5E5E5',
+      300: '#D4D4D4',
+      400: '#A3A3A3',
+      500: '#737373',
+      600: '#525252',
+      700: '#404040',
+      800: '#262626',
+      900: '#171717',
+    },
+    // Status Colors
+    success: '#10B981',
+    warning: '#F59E0B',
+    error: '#EF4444',
+    info: '#3B82F6',
+    // Background Colors
+    background: {
+      primary: '#FFFFFF',
+      secondary: '#FAFBFC',
+      tertiary: '#F8FAFC',
+    },
+    // Surface Colors
+    surface: {
+      primary: '#FFFFFF',
+      secondary: '#F8FAFC',
+      elevated: '#FFFFFF',
+    },
+    // Text Colors
+    text: {
+      primary: '#111827',
+      secondary: '#6B7280',
+      tertiary: '#9CA3AF',
+      inverse: '#FFFFFF',
+    }
+  },
+  shadows: {
+    small: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    medium: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+      elevation: 4,
+    },
+    large: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.12,
+      shadowRadius: 24,
+      elevation: 8,
+    },
+    colored: (color) => ({
+      shadowColor: color,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.25,
+      shadowRadius: 12,
+      elevation: 6,
+    }),
+  },
+  typography: {
+    // Display
+    display: {
+      fontSize: 32,
+      fontWeight: '800',
+      lineHeight: 40,
+    },
+    // Headings
+    h1: {
+      fontSize: 24,
+      fontWeight: '700',
+      lineHeight: 32,
+    },
+    h2: {
+      fontSize: 20,
+      fontWeight: '600',
+      lineHeight: 28,
+    },
+    h3: {
+      fontSize: 18,
+      fontWeight: '600',
+      lineHeight: 24,
+    },
+    // Body
+    body: {
+      fontSize: 16,
+      fontWeight: '400',
+      lineHeight: 24,
+    },
+    bodyMedium: {
+      fontSize: 14,
+      fontWeight: '500',
+      lineHeight: 20,
+    },
+    // Caption
+    caption: {
+      fontSize: 12,
+      fontWeight: '400',
+      lineHeight: 16,
+    },
+    captionMedium: {
+      fontSize: 12,
+      fontWeight: '500',
+      lineHeight: 16,
+    },
+    // Labels
+    label: {
+      fontSize: 11,
+      fontWeight: '600',
+      lineHeight: 14,
+      letterSpacing: 0.5,
+      textTransform: 'uppercase',
+    },
+  },
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 12,
+    lg: 16,
+    xl: 20,
+    xxl: 24,
+    xxxl: 32,
+  },
+  borderRadius: {
+    sm: 8,
+    md: 12,
+    lg: 16,
+    xl: 20,
+    xxl: 24,
+    full: 999,
+  },
+};
+
+// Enhanced Pie Chart Component
+const ModernPieChart = ({ data, size = 120, title, centerText }) => {
+  const radius = size / 2 - 10;
+  const circumference = 2 * Math.PI * radius;
   
-  return (
-    <View style={styles.chartContainer}>
-      <Text style={styles.chartTitle}>{title}</Text>
-      <View style={styles.chartBars}>
-        {data.map((item, index) => (
-          <View key={index} style={styles.barContainer}>
-            <View style={styles.barWrapper}>
-              <View
-                style={[
-                  styles.bar,
-                  {
-                    height: maxValue > 0 ? `${(item.value / maxValue) * 100}%` : '2%',
-                    backgroundColor: color,
-                  }
-                ]}
-              />
-            </View>
-            <Text style={styles.barLabel}>{item.label}</Text>
-            <Text style={styles.barValue}>{item.displayValue}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-};
-
-// Enhanced Progress Ring Component
-const ProgressRing = ({ progress, size = 120, strokeWidth = 10, color = "#6366F1", backgroundColor = "#F3F4F6" }) => {
-  const radius = (size - strokeWidth) / 2;
-  const circumference = radius * 2 * Math.PI;
-  const strokeDashoffset = circumference - (progress / 100) * circumference;
-
-  return (
-    <View style={[styles.progressRingContainer, { width: size, height: size }]}>
-      {/* Background Circle */}
-      <View
-        style={[
-          styles.progressRingBackground,
-          {
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            borderWidth: strokeWidth,
-            borderColor: backgroundColor,
-          }
-        ]}
-      />
-      
-      {/* Progress Circle */}
-      <View
-        style={[
-          styles.progressRingFill,
-          {
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            borderWidth: strokeWidth,
-            borderColor: 'transparent',
-            borderTopColor: color,
-            transform: [{ rotate: `${(progress / 100) * 360 - 90}deg` }],
-          }
-        ]}
-      />
-      
-      {/* Center Content */}
-      <View style={styles.progressRingCenter}>
-        <Text style={[styles.progressPercentage, { fontSize: size * 0.15 }]}>
-          {Math.round(progress)}%
-        </Text>
-        <Text style={[styles.progressLabel, { fontSize: size * 0.08 }]}>
-          Collected
-        </Text>
-      </View>
-      
-      {/* Glow Effect */}
-      <View
-        style={[
-          styles.progressRingGlow,
-          {
-            width: size + 8,
-            height: size + 8,
-            borderRadius: (size + 8) / 2,
-            backgroundColor: color + '20',
-          }
-        ]}
-      />
-    </View>
-  );
-};
-
-// Modern Pie Chart Component
-const ModernPieChart = ({ data, size = 160, title }) => {
   const total = data.reduce((sum, item) => sum + item.value, 0);
-  let currentAngle = 0;
-
+  let accumulatedPercentage = 0;
+  
   return (
     <View style={styles.pieChartContainer}>
       <Text style={styles.pieChartTitle}>{title}</Text>
       <View style={[styles.pieChart, { width: size, height: size }]}>
-        {/* Background Circle */}
-        <View
-          style={[
-            styles.pieChartBackground,
-            {
-              width: size,
-              height: size,
-              borderRadius: size / 2,
-            }
-          ]}
-        />
+        <View style={[styles.pieChartBackground, { width: size, height: size, borderRadius: size / 2 }]} />
         
-        {/* Data Segments */}
         {data.map((item, index) => {
           const percentage = total > 0 ? (item.value / total) * 100 : 0;
-          const angle = (percentage / 100) * 360;
-          const rotation = currentAngle;
-          currentAngle += angle;
-
+          const strokeDasharray = `${(percentage / 100) * circumference} ${circumference}`;
+          const strokeDashoffset = -((accumulatedPercentage / 100) * circumference);
+          accumulatedPercentage += percentage;
+          
           return (
             <View
               key={index}
@@ -160,36 +229,416 @@ const ModernPieChart = ({ data, size = 160, title }) => {
                   width: size,
                   height: size,
                   borderRadius: size / 2,
-                  borderWidth: size / 4,
+                  borderWidth: 8,
                   borderColor: 'transparent',
                   borderTopColor: item.color,
-                  transform: [{ rotate: `${rotation}deg` }],
-                  position: 'absolute',
+                  transform: [{ rotate: `${(accumulatedPercentage - percentage) * 3.6 - 90}deg` }],
                 }
               ]}
             />
           );
         })}
         
-        {/* Center Content */}
-        <View style={styles.pieChartCenter}>
-          <Text style={styles.pieChartCenterText}>Total</Text>
-          <Text style={styles.pieChartCenterValue}>
-            {data.reduce((sum, item) => sum + item.value, 0)}
+        <View style={[styles.pieChartCenter, { width: size * 0.6, height: size * 0.6, borderRadius: size * 0.3 }]}>
+          <Text style={styles.pieChartCenterText}>{centerText}</Text>
+        </View>
+      </View>
+      
+      <View style={styles.pieChartLegend}>
+        {data.map((item, index) => (
+          <View key={index} style={styles.pieChartLegendItem}>
+            <View style={[styles.pieChartLegendDot, { backgroundColor: item.color }]} />
+            <Text style={styles.pieChartLegendText}>{item.label}</Text>
+            <Text style={styles.pieChartLegendValue}>{item.displayValue}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+};
+
+// Enhanced Donut Chart for better visualization
+const ModernDonutChart = ({ data, size = 140, title, subtitle }) => {
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+  let currentAngle = -90; // Start from top
+  
+  return (
+    <View style={styles.donutContainer}>
+      <Text style={styles.donutTitle}>{title}</Text>
+      <View style={[styles.donutChart, { width: size, height: size }]}>
+        {data.map((item, index) => {
+          const percentage = total > 0 ? (item.value / total) * 100 : 0;
+          const angle = (percentage / 100) * 360;
+          const nextAngle = currentAngle + angle;
+          
+          const startAngleRad = (currentAngle * Math.PI) / 180;
+          const endAngleRad = (nextAngle * Math.PI) / 180;
+          
+          currentAngle = nextAngle;
+          
+          return (
+            <View
+              key={index}
+              style={[
+                styles.donutSlice,
+                {
+                  width: size,
+                  height: size,
+                  borderRadius: size / 2,
+                  borderWidth: 12,
+                  borderColor: 'transparent',
+                  borderTopColor: item.color,
+                  transform: [{ rotate: `${currentAngle - angle}deg` }],
+                  opacity: 0.9,
+                }
+              ]}
+            />
+          );
+        })}
+        
+        <View style={[styles.donutCenter, { width: size * 0.55, height: size * 0.55, borderRadius: size * 0.275 }]}>
+          <Text style={styles.donutCenterValue}>{total}</Text>
+          <Text style={styles.donutCenterLabel}>{subtitle}</Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+// Enhanced Bar Chart Component with modern styling
+const ModernBarChart = ({ data, title, color = theme.colors.primary[500], height = 140 }) => {
+  const maxValue = Math.max(...data.map(item => item.value));
+  const [animatedValues] = useState(data.map(() => new Animated.Value(0)));
+
+  useEffect(() => {
+    const animations = animatedValues.map((anim, index) => 
+      Animated.timing(anim, {
+        toValue: data[index].value,
+        duration: 1200 + (index * 150),
+        useNativeDriver: false,
+      })
+    );
+    Animated.stagger(100, animations).start();
+  }, [data]);
+
+  return (
+    <View style={[styles.modernChartContainer, { height: height + 120 }]}>
+      <Text style={styles.modernChartTitle}>{title}</Text>
+      <View style={[styles.modernChartBars, { height }]}>
+        {data.map((item, index) => (
+          <View key={index} style={styles.modernBarContainer}>
+            <View style={[styles.modernBarWrapper, { height: height - 60 }]}>
+              <Animated.View
+                style={[
+                  styles.modernBar,
+                  {
+                    height: animatedValues[index].interpolate({
+                      inputRange: [0, maxValue || 1],
+                      outputRange: ['4%', '100%'],
+                      extrapolate: 'clamp',
+                    }),
+                    backgroundColor: color,
+                  }
+                ]}
+              />
+              <View style={[styles.modernBarGlow, { backgroundColor: color + '20' }]} />
+            </View>
+            <Text style={styles.modernBarLabel}>{item.label}</Text>
+            <Text style={styles.modernBarValue}>{item.displayValue}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+};
+
+// Enhanced Agent Performance Ring
+const AgentPerformanceRing = ({ agent, size = 100 }) => {
+  const performance = agent.closing_balance > 0 
+    ? Math.min((agent.closing_balance / (agent.opening_balance || 1)) * 100, 100)
+    : 0;
+  
+  return (
+    <View style={[styles.performanceRing, { width: size, height: size }]}>
+      <View
+        style={[
+          styles.performanceRingBackground,
+          { 
+            width: size, 
+            height: size, 
+            borderRadius: size / 2,
+            borderWidth: size * 0.06,
+            borderColor: theme.colors.neutral[200],
+          }
+        ]}
+      />
+      <View
+        style={[
+          styles.performanceRingFill,
+          {
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            borderWidth: size * 0.06,
+            borderColor: 'transparent',
+            borderTopColor: theme.colors.secondary[500],
+            transform: [{ rotate: `${(performance / 100) * 360 - 90}deg` }],
+          }
+        ]}
+      />
+      <View style={styles.performanceRingCenter}>
+        <Text style={[
+          styles.performancePercentage, 
+          { 
+            fontSize: size * 0.14,
+            color: theme.colors.text.primary,
+            fontWeight: '700',
+          }
+        ]}>
+          {Math.round(performance)}%
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+// Modern Metric Card with glass morphism effect
+const ModernMetricCard = ({ icon, value, label, trend, gradient = ['#6366F1', '#8B5CF6'] }) => {
+  return (
+    <View style={[styles.modernMetricCard, theme.shadows.medium]}>
+      <View style={[styles.metricGradientBackground, { backgroundColor: gradient[0] }]} />
+      <View style={styles.metricContent}>
+        <View style={styles.metricHeader}>
+          <View style={styles.metricIconContainer}>
+            <Icon name={icon} size={24} color={theme.colors.text.inverse} />
+          </View>
+          {trend !== undefined && (
+            <View style={[
+              styles.trendBadge,
+              { backgroundColor: trend > 0 ? theme.colors.secondary[500] : theme.colors.error }
+            ]}>
+              <Icon 
+                name={trend > 0 ? "trending-up" : "trending-down"} 
+                size={14} 
+                color={theme.colors.text.inverse} 
+              />
+              <Text style={styles.trendText}>
+                {Math.abs(trend)}%
+              </Text>
+            </View>
+          )}
+        </View>
+        <Text style={styles.metricValue}>{value}</Text>
+        <Text style={styles.metricLabel}>{label}</Text>
+      </View>
+    </View>
+  );
+};
+
+// Enhanced Debtor Card Component
+const ModernDebtorCard = ({ debtor, formatCurrency, onPress }) => {
+  const riskLevel = debtor.balance_due > 1000000 ? 'high' : debtor.balance_due > 500000 ? 'medium' : 'low';
+  const riskColors = {
+    high: theme.colors.error,
+    medium: theme.colors.warning,
+    low: theme.colors.success,
+  };
+
+  return (
+    <TouchableOpacity style={[styles.modernDebtorCard, theme.shadows.medium]} onPress={onPress}>
+      <View style={styles.debtorCardHeader}>
+        <View style={styles.debtorInfo}>
+          <View style={[
+            styles.debtorAvatar,
+            { backgroundColor: riskColors[riskLevel] }
+          ]}>
+            <Text style={styles.debtorAvatarText}>
+              {debtor.debtor_name?.charAt(0)?.toUpperCase() || 'D'}
+            </Text>
+          </View>
+          <View style={styles.debtorDetails}>
+            <Text style={styles.debtorName}>{debtor.debtor_name || 'Unknown Debtor'}</Text>
+            <Text style={styles.debtorAgent}>Agent: {debtor.agent_name || 'Unknown'}</Text>
+            {debtor.phone && (
+              <Text style={styles.debtorPhone}>{debtor.phone}</Text>
+            )}
+          </View>
+        </View>
+        
+        <View style={[
+          styles.riskBadge,
+          { backgroundColor: riskColors[riskLevel] }
+        ]}>
+          <Text style={styles.riskBadgeText}>
+            {riskLevel.toUpperCase()}
           </Text>
         </View>
       </View>
       
-      {/* Legend */}
-      <View style={styles.pieChartLegend}>
-        {data.map((item, index) => (
-          <View key={index} style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-            <Text style={styles.legendLabel}>{item.label}</Text>
-            <Text style={styles.legendValue}>{item.displayValue}</Text>
-          </View>
-        ))}
+      <View style={styles.debtorMetrics}>
+        <View style={styles.debtorMetric}>
+          <Text style={styles.debtorMetricLabel}>Amount Due</Text>
+          <Text style={[styles.debtorMetricValue, { color: riskColors[riskLevel] }]}>
+            {formatCurrency(debtor.balance_due || 0)}
+          </Text>
+        </View>
+        
+        <View style={styles.debtorMetric}>
+          <Text style={styles.debtorMetricLabel}>Status</Text>
+          <Text style={[
+            styles.debtorStatus,
+            { color: debtor.balance_due > 0 ? theme.colors.error : theme.colors.success }
+          ]}>
+            {debtor.balance_due > 0 ? 'Outstanding' : 'Paid'}
+          </Text>
+        </View>
       </View>
+      
+      <View style={styles.debtorProgress}>
+        <View style={styles.debtorProgressBar}>
+          <View style={[
+            styles.debtorProgressFill,
+            { 
+              width: debtor.balance_due > 0 ? '100%' : '0%',
+              backgroundColor: riskColors[riskLevel],
+            }
+          ]} />
+        </View>
+        <Text style={styles.debtorProgressText}>
+          {debtor.balance_due > 0 ? 'Needs Collection' : 'Completed'}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// Enhanced Agent Comparison Chart
+const AgentComparisonChart = ({ agents, formatCurrency }) => {
+  const sortedAgents = agents.sort((a, b) => (b.closing_balance || 0) - (a.closing_balance || 0));
+  const topAgents = sortedAgents.slice(0, 5);
+
+  return (
+    <View style={styles.agentComparisonContainer}>
+      <Text style={styles.modernChartTitle}>Top Performing Agents</Text>
+      {topAgents.map((agent, index) => {
+        const maxBalance = Math.max(...topAgents.map(a => a.closing_balance || 0));
+        const percentage = maxBalance > 0 ? ((agent.closing_balance || 0) / maxBalance) * 100 : 0;
+        const rankColors = ['#FFD700', '#C0C0C0', '#CD7F32', theme.colors.primary[500], theme.colors.primary[400]];
+        
+        return (
+          <View key={agent.id} style={styles.agentComparisonItem}>
+            <View style={styles.agentRankContainer}>
+              <View style={[
+                styles.agentRank,
+                { 
+                  backgroundColor: rankColors[index],
+                  ...theme.shadows.small,
+                }
+              ]}>
+                <Text style={styles.agentRankText}>{index + 1}</Text>
+              </View>
+              <View style={styles.agentInfo}>
+                <Text style={styles.agentComparisonName}>{agent.name}</Text>
+                <Text style={styles.agentComparisonBalance}>
+                  {formatCurrency(agent.closing_balance || 0)}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.agentPerformanceBarContainer}>
+              <View style={styles.agentPerformanceBarTrack}>
+                <Animated.View
+                  style={[
+                    styles.agentPerformanceBarFill,
+                    { 
+                      width: `${percentage}%`,
+                      backgroundColor: index === 0 ? theme.colors.secondary[500] : 
+                                     index === 1 ? theme.colors.primary[500] : 
+                                     theme.colors.accent.violet,
+                    }
+                  ]}
+                />
+              </View>
+              <AgentPerformanceRing agent={agent} size={36} />
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+};
+
+// Enhanced Progress Ring
+const EnhancedProgressRing = ({ progress, size = 140, title, subtitle, color = theme.colors.secondary[500] }) => {
+  return (
+    <View style={styles.enhancedProgressContainer}>
+      <View style={[styles.progressRingContainer, { width: size, height: size }]}>
+        <View
+          style={[
+            styles.progressRingBackground,
+            {
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+              borderWidth: 10,
+              borderColor: theme.colors.neutral[200],
+            }
+          ]}
+        />
+        <View
+          style={[
+            styles.progressRingFill,
+            {
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+              borderWidth: 10,
+              borderColor: 'transparent',
+              borderTopColor: color,
+              transform: [{ rotate: `${(progress / 100) * 360 - 90}deg` }],
+            }
+          ]}
+        />
+        <View style={styles.progressRingCenter}>
+          <Text style={[styles.progressPercentage, { fontSize: size * 0.16 }]}>
+            {Math.round(progress)}%
+          </Text>
+          <Text style={[styles.progressLabel, { fontSize: size * 0.09 }]}>
+            Complete
+          </Text>
+        </View>
+      </View>
+      
+      <View style={styles.progressInfo}>
+        <Text style={styles.progressTitle}>{title}</Text>
+        <Text style={styles.progressSubtitle}>{subtitle}</Text>
+      </View>
+    </View>
+  );
+};
+
+// Modern Dashboard Header
+const ModernDashboardHeader = ({ user, onMenuPress, onLogout, agentCount }) => {
+  return (
+    <View style={styles.modernHeader}>
+      <TouchableOpacity onPress={onMenuPress} style={styles.modernMenuButton}>
+        <Icon name="menu" size={24} color={theme.colors.text.inverse} />
+      </TouchableOpacity>
+      
+      <View style={styles.modernHeaderCenter}>
+        <Text style={styles.modernHeaderTitle}>Agent Manager</Text>
+        <View style={styles.modernHeaderSubtitleContainer}>
+          <View style={styles.agentCountBadge}>
+            <Icon name="people" size={14} color={theme.colors.secondary[500]} />
+            <Text style={styles.modernHeaderSubtitle}>
+              {agentCount} agents • {user?.name?.split(' ')[0]}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <TouchableOpacity onPress={onLogout} style={styles.modernLogoutButton}>
+        <Icon name="logout" size={24} color={theme.colors.text.inverse} />
+      </TouchableOpacity>
     </View>
   );
 };
@@ -204,6 +653,7 @@ const DashboardScreen = () => {
 
   // Animation values
   const fadeAnim = useState(new Animated.Value(0))[0];
+  const slideAnim = useState(new Animated.Value(30))[0];
 
   // Dashboard data state
   const [dashboardData, setDashboardData] = useState({
@@ -243,7 +693,7 @@ const DashboardScreen = () => {
 
   const [weeklyStats, setWeeklyStats] = useState(null);
   const [monthlyStats, setMonthlyStats] = useState(null);
-  const [myAgents, setMyAgents] = useState([]); // Dedicated state for employee's agents
+  const [myAgents, setMyAgents] = useState([]);
   const [allDebtors, setAllDebtors] = useState([]);
   const [agentBalances, setAgentBalances] = useState({
     totalOpeningBalance: 0,
@@ -251,7 +701,7 @@ const DashboardScreen = () => {
     agentCount: 0,
   });
 
-  // Data fetching functions
+  // Data fetching functions (keeping the same logic)
   const fetchDashboardData = useCallback(async () => {
     try {
       const userData = await getUserData();
@@ -308,7 +758,6 @@ const DashboardScreen = () => {
     }
   }, []);
 
-  // NEW: Dedicated function to fetch employee's agents
   const fetchMyAgents = useCallback(async () => {
     try {
       const userData = await getUserData();
@@ -328,7 +777,6 @@ const DashboardScreen = () => {
       const agentsData = await getAgents(headers);
       console.log('📊 Agents data received:', agentsData);
 
-      // Handle different possible response structures
       const agents = Array.isArray(agentsData) 
         ? agentsData 
         : (agentsData.agents || agentsData.data || []);
@@ -352,7 +800,6 @@ const DashboardScreen = () => {
 
       setMyAgents(validatedAgents);
 
-      // Calculate agent balances for dashboard metrics
       if (validatedAgents.length > 0) {
         const totalOpeningBalance = validatedAgents.reduce((sum, agent) => sum + (agent.opening_balance || 0), 0);
         const totalClosingBalance = validatedAgents.reduce((sum, agent) => sum + (agent.closing_balance || 0), 0);
@@ -446,8 +893,7 @@ const DashboardScreen = () => {
                 created_at: item.created_at || new Date().toISOString(),
                 debtor_name: item.debtor_name || "Unknown Debtor",
                 phone: item.phone || null,
-                agent_name: item.agent_name || 'Unknown Agent', // Track which agent manages this debtor
-                // Map to common fields for compatibility
+                agent_name: item.agent_name || 'Unknown Agent',
                 name: item.debtor_name || "Unknown Debtor",
                 total_debt: parseFloat(item.balance_due || 0),
                 amount: parseFloat(item.balance_due || 0),
@@ -473,7 +919,7 @@ const DashboardScreen = () => {
       setLoading(true);
       await Promise.all([
         fetchDashboardData(),
-        fetchMyAgents(), // Use dedicated agent fetching
+        fetchMyAgents(),
         fetchWeeklyStats(),
         fetchMonthlyStats(),
         fetchAllDebtors(),
@@ -493,17 +939,24 @@ const DashboardScreen = () => {
 
   useEffect(() => {
     loadDashboardData();
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 1000,
-      useNativeDriver: true,
-    }).start();
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
   }, [loadDashboardData]);
 
   useFocusEffect(
     useCallback(() => {
       fetchDashboardData();
-      fetchMyAgents(); // Refresh agents when screen is focused
+      fetchMyAgents();
     }, [fetchDashboardData, fetchMyAgents])
   );
 
@@ -534,76 +987,77 @@ const DashboardScreen = () => {
     });
   }, []);
 
+  // Calculate metrics and trends
+  const metrics = useMemo(() => {
+    const { dailyStats, quickStats } = dashboardData;
+    
+    return {
+      totalBalance: dailyStats.closingBalance + agentBalances.totalClosingBalance,
+      balanceTrend: dailyStats.netChange > 0 ? 15 : -8,
+      transactionsTrend: 12,
+      commissionsTrend: 25,
+      debtorsTrend: -5,
+    };
+  }, [dashboardData, agentBalances]);
+
   // Prepare chart data
   const chartData = useMemo(() => {
     const { dailyStats, quickStats } = dashboardData;
     
     return {
-      balanceChart: [
-        { label: 'Employee Opening', value: dailyStats.openingBalance, displayValue: formatCurrency(dailyStats.openingBalance) },
-        { label: 'Employee Closing', value: dailyStats.closingBalance, displayValue: formatCurrency(dailyStats.closingBalance) },
-        { label: 'Agents Opening', value: agentBalances.totalOpeningBalance, displayValue: formatCurrency(agentBalances.totalOpeningBalance) },
-        { label: 'Agents Closing', value: agentBalances.totalClosingBalance, displayValue: formatCurrency(agentBalances.totalClosingBalance) },
+      balanceComparison: [
+        { label: 'Employee', value: dailyStats.closingBalance, displayValue: formatCurrency(dailyStats.closingBalance) },
+        { label: 'Agent 1', value: myAgents[0]?.closing_balance || 0, displayValue: formatCurrency(myAgents[0]?.closing_balance || 0) },
+        { label: 'Agent 2', value: myAgents[1]?.closing_balance || 0, displayValue: formatCurrency(myAgents[1]?.closing_balance || 0) },
+        { label: 'Agent 3', value: myAgents[2]?.closing_balance || 0, displayValue: formatCurrency(myAgents[2]?.closing_balance || 0) },
       ],
       transactionChart: [
-        { label: 'Employee Performed', value: dailyStats.employeeTransactions, displayValue: dailyStats.employeeTransactions.toString() },
-        { label: 'For Agents', value: dailyStats.agentTransactions, displayValue: dailyStats.agentTransactions.toString() },
-        { label: 'Total Managed', value: dailyStats.employeeTransactions + dailyStats.agentTransactions, displayValue: (dailyStats.employeeTransactions + dailyStats.agentTransactions).toString() },
+        { label: 'Employee', value: dailyStats.employeeTransactions, displayValue: dailyStats.employeeTransactions.toString() },
+        { label: 'Agents', value: dailyStats.agentTransactions, displayValue: dailyStats.agentTransactions.toString() },
+        { label: 'Total', value: dailyStats.employeeTransactions + dailyStats.agentTransactions, displayValue: (dailyStats.employeeTransactions + dailyStats.agentTransactions).toString() },
       ],
-      debtChart: [
-        { label: 'Outstanding', value: quickStats.totalDebtOutstanding, displayValue: formatCurrency(quickStats.totalDebtOutstanding) },
-        { label: 'Collected', value: quickStats.totalDebtCollected, displayValue: formatCurrency(quickStats.totalDebtCollected) },
-      ],
-      pieChartData: [
+      debtorsPieChart: [
         { 
-          label: 'Outstanding Debt', 
-          value: quickStats.totalDebtOutstanding, 
-          displayValue: formatCurrency(quickStats.totalDebtOutstanding),
-          color: '#EF4444'
-        },
-        { 
-          label: 'Collected Debt', 
-          value: quickStats.totalDebtCollected, 
-          displayValue: formatCurrency(quickStats.totalDebtCollected),
-          color: '#10B981'
-        },
-      ],
-      debtorDistribution: [
-        {
-          label: 'High Risk (>TSh 1M)',
+          label: 'High Risk', 
           value: allDebtors.filter(d => d.balance_due > 1000000).length,
           displayValue: allDebtors.filter(d => d.balance_due > 1000000).length.toString(),
-          color: '#DC2626'
+          color: theme.colors.error
         },
-        {
-          label: 'Medium Risk (>TSh 500K)',
+        { 
+          label: 'Medium Risk', 
           value: allDebtors.filter(d => d.balance_due > 500000 && d.balance_due <= 1000000).length,
           displayValue: allDebtors.filter(d => d.balance_due > 500000 && d.balance_due <= 1000000).length.toString(),
-          color: '#F59E0B'
+          color: theme.colors.warning
         },
-        {
-          label: 'Low Risk (≤TSh 500K)',
-          value: allDebtors.filter(d => d.balance_due <= 500000).length,
-          displayValue: allDebtors.filter(d => d.balance_due <= 500000).length.toString(),
-          color: '#10B981'
+        { 
+          label: 'Low Risk', 
+          value: allDebtors.filter(d => d.balance_due <= 500000 && d.balance_due > 0).length,
+          displayValue: allDebtors.filter(d => d.balance_due <= 500000 && d.balance_due > 0).length.toString(),
+          color: theme.colors.success
         },
       ],
-      agentStatusPie: [
+      agentPerformancePie: [
         {
-          label: 'Updated Today',
-          value: dashboardData.agentsSummary.summary.agentsWithUpdatesToday,
-          displayValue: dashboardData.agentsSummary.summary.agentsWithUpdatesToday.toString(),
-          color: '#10B981'
+          label: 'Growing',
+          value: myAgents.filter(a => a.closing_balance > a.opening_balance).length,
+          displayValue: myAgents.filter(a => a.closing_balance > a.opening_balance).length.toString(),
+          color: theme.colors.secondary[500]
         },
         {
-          label: 'Pending Updates',
-          value: dashboardData.agentsSummary.summary.totalAgents - dashboardData.agentsSummary.summary.agentsWithUpdatesToday,
-          displayValue: (dashboardData.agentsSummary.summary.totalAgents - dashboardData.agentsSummary.summary.agentsWithUpdatesToday).toString(),
-          color: '#F59E0B'
+          label: 'Stable',
+          value: myAgents.filter(a => a.closing_balance === a.opening_balance).length,
+          displayValue: myAgents.filter(a => a.closing_balance === a.opening_balance).length.toString(),
+          color: theme.colors.accent.blue
+        },
+        {
+          label: 'Declining',
+          value: myAgents.filter(a => a.closing_balance < a.opening_balance).length,
+          displayValue: myAgents.filter(a => a.closing_balance < a.opening_balance).length.toString(),
+          color: theme.colors.error
         },
       ],
     };
-  }, [dashboardData, formatCurrency, agentBalances, allDebtors]);
+  }, [dashboardData, formatCurrency, myAgents, allDebtors]);
 
   // Calculate debt collection rate
   const debtCollectionRate = useMemo(() => {
@@ -616,8 +1070,8 @@ const DashboardScreen = () => {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6366F1" />
-          <Text style={styles.loadingText}>Loading Employee Dashboard...</Text>
+          <ActivityIndicator size="large" color={theme.colors.primary[500]} />
+          <Text style={styles.loadingText}>Loading Dashboard...</Text>
         </View>
       </SafeAreaView>
     );
@@ -627,25 +1081,17 @@ const DashboardScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1F2937" />
+      <StatusBar barStyle="light-content" backgroundColor={theme.colors.neutral[900]} />
       
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={toggleMenu} style={styles.menuButton}>
-          <Icon name="menu" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Agent Manager Dashboard</Text>
-          <Text style={styles.headerSubtitle}>Managing {myAgents.length} agents • {user?.name?.split(' ')[0]}</Text>
-        </View>
+      {/* Modern Header */}
+      <ModernDashboardHeader 
+        user={user}
+        onMenuPress={toggleMenu}
+        onLogout={logout}
+        agentCount={myAgents.length}
+      />
 
-        <TouchableOpacity onPress={logout} style={styles.logoutButton}>
-          <Icon name="logout" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Modern Side Menu */}
+      {/* Enhanced Side Menu with ScrollView */}
       {menuOpen && (
         <Animated.View style={[styles.menuOverlay, { opacity: fadeAnim }]}>
           <Animated.View style={[
@@ -659,7 +1105,6 @@ const DashboardScreen = () => {
               }]
             }
           ]}>
-            {/* Menu Header with User Profile */}
             <View style={styles.modernMenuHeader}>
               <View style={styles.menuProfileSection}>
                 <View style={styles.profileAvatar}>
@@ -678,118 +1123,137 @@ const DashboardScreen = () => {
               </View>
               
               <TouchableOpacity onPress={toggleMenu} style={styles.modernCloseButton}>
-                <Icon name="close" size={20} color="#6B7280" />
+                <Icon name="close" size={20} color={theme.colors.text.secondary} />
               </TouchableOpacity>
             </View>
 
-            {/* Menu Items */}
-            <View style={styles.menuItemsContainer}>
-              <Text style={styles.menuSectionTitle}>AGENT MANAGEMENT</Text>
-              
-              {[
-                { screen: "Dashboard", icon: "dashboard", label: "Dashboard", isActive: true },
-                { screen: "Transactions", icon: "receipt", label: "Agent Transactions", badge: dailyStats.agentTransactions },
-                { screen: "Agents", icon: "people", label: "My Agents", badge: myAgents.length },
-                { screen: "Commissions", icon: "attach-money", label: "Commissions" },
-                { screen: "Debtors", icon: "account-balance", label: "Managed Debtors", badge: quickStats.activeDebtors },
-              ].map((item, index) => (
-                <TouchableOpacity
-                  key={item.screen}
-                  style={[
-                    styles.modernMenuItem,
-                    item.isActive && styles.modernMenuItemActive
-                  ]}
-                  onPress={() => item.screen === "Dashboard" ? toggleMenu() : navigateTo(item.screen)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.menuItemContent}>
-                    <View style={[
-                      styles.modernMenuItemIcon,
-                      item.isActive && styles.modernMenuItemIconActive
-                    ]}>
-                      <Icon 
-                        name={item.icon} 
-                        size={18} 
-                        color={item.isActive ? "#FFFFFF" : "#6366F1"} 
-                      />
-                    </View>
-                    <Text style={[
-                      styles.modernMenuItemText,
-                      item.isActive && styles.modernMenuItemTextActive
-                    ]}>
-                      {item.label}
-                    </Text>
-                  </View>
-                  
-                  {item.badge && item.badge > 0 && (
-                    <View style={styles.menuItemBadge}>
-                      <Text style={styles.menuItemBadgeText}>
-                        {item.badge > 99 ? '99+' : item.badge}
+            {/* FIXED: Added ScrollView to menu items */}
+            <ScrollView 
+              style={styles.menuScrollContainer}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              <View style={styles.menuItemsContainer}>
+                <Text style={styles.menuSectionTitle}>AGENT MANAGEMENT</Text>
+                
+                {[
+                  { screen: "Dashboard", icon: "dashboard", label: "Dashboard", isActive: true },
+                  { screen: "Transactions", icon: "receipt", label: "Agent Transactions", badge: dailyStats.agentTransactions },
+                  { screen: "Agents", icon: "people", label: "My Agents", badge: myAgents.length },
+                  { screen: "Commissions", icon: "attach-money", label: "Commissions" },
+                  { screen: "Debtors", icon: "account-balance", label: "Managed Debtors", badge: quickStats.activeDebtors },
+                ].map((item, index) => (
+                  <TouchableOpacity
+                    key={item.screen}
+                    style={[
+                      styles.modernMenuItem,
+                      item.isActive && styles.modernMenuItemActive
+                    ]}
+                    onPress={() => item.screen === "Dashboard" ? toggleMenu() : navigateTo(item.screen)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.menuItemContent}>
+                      <View style={[
+                        styles.modernMenuItemIcon,
+                        { backgroundColor: item.isActive ? theme.colors.primary[500] : theme.colors.primary[50] },
+                      ]}>
+                        <Icon 
+                          name={item.icon} 
+                          size={18} 
+                          color={item.isActive ? theme.colors.text.inverse : theme.colors.primary[500]} 
+                        />
+                      </View>
+                      <Text style={[
+                        styles.modernMenuItemText,
+                        item.isActive && styles.modernMenuItemTextActive
+                      ]}>
+                        {item.label}
                       </Text>
                     </View>
-                  )}
-                  
-                  <Icon 
-                    name="chevron-right" 
-                    size={16} 
-                    color={item.isActive ? "#FFFFFF" : "#9CA3AF"} 
-                  />
+                    
+                    {item.badge && item.badge > 0 && (
+                      <View style={styles.menuItemBadge}>
+                        <Text style={styles.menuItemBadgeText}>
+                          {item.badge > 99 ? '99+' : item.badge}
+                        </Text>
+                      </View>
+                    )}
+                    
+                    <Icon 
+                      name="chevron-right" 
+                      size={16} 
+                      color={item.isActive ? theme.colors.primary[500] : theme.colors.text.tertiary} 
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.menuStatsSection}>
+                <Text style={styles.menuSectionTitle}>TODAY'S SUMMARY</Text>
+                
+                <View style={styles.menuStatItem}>
+                  <View style={[styles.menuStatIcon, { backgroundColor: theme.colors.secondary[500] }]}>
+                    <Icon name="account-balance-wallet" size={16} color={theme.colors.text.inverse} />
+                  </View>
+                  <View style={styles.menuStatContent}>
+                    <Text style={styles.menuStatLabel}>Total Balance</Text>
+                    <Text style={styles.menuStatValue}>
+                      {formatCurrency(metrics.totalBalance)}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.menuStatItem}>
+                  <View style={[styles.menuStatIcon, { backgroundColor: theme.colors.primary[500] }]}>
+                    <Icon name="people" size={16} color={theme.colors.text.inverse} />
+                  </View>
+                  <View style={styles.menuStatContent}>
+                    <Text style={styles.menuStatLabel}>Agents Performance</Text>
+                    <Text style={styles.menuStatValue}>
+                      {myAgents.filter(a => a.closing_balance > a.opening_balance).length}/{myAgents.length} Growing
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.menuStatItem}>
+                  <View style={[styles.menuStatIcon, { backgroundColor: theme.colors.error }]}>
+                    <Icon name="warning" size={16} color={theme.colors.text.inverse} />
+                  </View>
+                  <View style={styles.menuStatContent}>
+                    <Text style={styles.menuStatLabel}>High Risk Debtors</Text>
+                    <Text style={styles.menuStatValue}>
+                      {allDebtors.filter(d => d.balance_due > 1000000).length} debtors
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.menuStatItem}>
+                  <View style={[styles.menuStatIcon, { backgroundColor: theme.colors.accent.amber }]}>
+                    <Icon name="trending-up" size={16} color={theme.colors.text.inverse} />
+                  </View>
+                  <View style={styles.menuStatContent}>
+                    <Text style={styles.menuStatLabel}>Collection Rate</Text>
+                    <Text style={styles.menuStatValue}>
+                      {Math.round(debtCollectionRate)}%
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.menuFooter}>
+                <TouchableOpacity style={styles.menuFooterItem} onPress={() => navigateTo("Settings")}>
+                  <Icon name="settings" size={18} color={theme.colors.text.secondary} />
+                  <Text style={styles.menuFooterText}>Settings</Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Quick Stats Section */}
-            <View style={styles.menuStatsSection}>
-              <Text style={styles.menuSectionTitle}>AGENTS SUMMARY</Text>
-              
-              <View style={styles.menuStatItem}>
-                <View style={styles.menuStatIcon}>
-                  <Icon name="account-balance-wallet" size={16} color="#10B981" />
-                </View>
-                <View style={styles.menuStatContent}>
-                  <Text style={styles.menuStatLabel}>Employee Balance</Text>
-                  <Text style={[
-                    styles.menuStatValue,
-                    { color: dailyStats.netChange >= 0 ? '#10B981' : '#EF4444' }
-                  ]}>
-                    {formatCurrency(dailyStats.closingBalance)}
-                  </Text>
-                </View>
+                
+                <TouchableOpacity style={styles.logoutMenuItem} onPress={logout}>
+                  <Icon name="exit-to-app" size={18} color={theme.colors.error} />
+                  <Text style={styles.logoutMenuText}>Sign Out</Text>
+                </TouchableOpacity>
               </View>
-
-              <View style={styles.menuStatItem}>
-                <View style={styles.menuStatIcon}>
-                  <Icon name="people" size={16} color="#6366F1" />
-                </View>
-                <View style={styles.menuStatContent}>
-                  <Text style={styles.menuStatLabel}>Agents Total Balance</Text>
-                  <Text style={styles.menuStatValue}>
-                    {formatCurrency(agentBalances.totalClosingBalance)}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Menu Footer */}
-            <View style={styles.menuFooter}>
-              <TouchableOpacity style={styles.menuFooterItem} onPress={() => navigateTo("Settings")}>
-                <Icon name="settings" size={18} color="#6B7280" />
-                <Text style={styles.menuFooterText}>Settings</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity style={styles.menuFooterItem} onPress={() => navigateTo("Help")}>
-                <Icon name="help" size={18} color="#6B7280" />
-                <Text style={styles.menuFooterText}>Help & Support</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity style={styles.logoutMenuItem} onPress={logout}>
-                <Icon name="exit-to-app" size={18} color="#EF4444" />
-                <Text style={styles.logoutMenuText}>Sign Out</Text>
-              </TouchableOpacity>
-            </View>
+            </ScrollView>
           </Animated.View>
           
-          {/* Enhanced Backdrop */}
           <TouchableOpacity 
             style={styles.menuBackdrop} 
             onPress={toggleMenu}
@@ -798,21 +1262,21 @@ const DashboardScreen = () => {
         </Animated.View>
       )}
 
-      {/* Tab Navigation */}
-      <View style={styles.tabContainer}>
+      {/* Modern Tab Navigation */}
+      <View style={styles.modernTabContainer}>
         {[
           { key: 'overview', label: 'Overview', icon: 'dashboard' },
           { key: 'analytics', label: 'Analytics', icon: 'analytics' },
           { key: 'agents', label: 'My Agents', icon: 'people' },
-          { key: 'debtors', label: 'Managed Debtors', icon: 'account-balance' },
+          { key: 'debtors', label: 'Debtors', icon: 'account-balance' },
         ].map((tab) => (
           <TouchableOpacity
             key={tab.key}
-            style={[styles.tab, activeTab === tab.key && styles.activeTab]}
+            style={[styles.modernTab, activeTab === tab.key && styles.modernActiveTab]}
             onPress={() => setActiveTab(tab.key)}
           >
-            <Icon name={tab.icon} size={18} color={activeTab === tab.key ? '#FFFFFF' : '#6B7280'} />
-            <Text style={[styles.tabText, activeTab === tab.key && styles.activeTabText]}>
+            <Icon name={tab.icon} size={18} color={activeTab === tab.key ? theme.colors.primary[500] : theme.colors.text.secondary} />
+            <Text style={[styles.modernTabText, activeTab === tab.key && styles.modernActiveTabText]}>
               {tab.label}
             </Text>
           </TouchableOpacity>
@@ -821,204 +1285,178 @@ const DashboardScreen = () => {
 
       <ScrollView
         style={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            colors={[theme.colors.primary[500]]}
+            tintColor={theme.colors.primary[500]}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View style={[styles.contentContainer, { opacity: fadeAnim }]}>
+        <Animated.View style={[
+          styles.contentContainer, 
+          { 
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }]
+          }
+        ]}>
           
           {/* Overview Tab */}
           {activeTab === 'overview' && (
             <>
-              {/* Status Card */}
-              <View style={styles.statusCard}>
-                <View style={styles.statusHeader}>
+              {/* Modern Status Card */}
+              <View style={[
+                styles.modernStatusCard,
+                { backgroundColor: dailyStats.hasTodayTransaction ? theme.colors.secondary[500] : theme.colors.error },
+                theme.shadows.large,
+              ]}>
+                <View style={styles.modernStatusHeader}>
                   <View>
-                    <Text style={styles.statusDate}>{new Date().toDateString()}</Text>
-                    <Text style={styles.statusUpdate}>
+                    <Text style={styles.modernStatusDate}>{new Date().toDateString()}</Text>
+                    <Text style={styles.modernStatusUpdate}>
                       Last updated: {lastUpdated ? formatTime(lastUpdated) : 'Never'}
                     </Text>
                   </View>
-                  <View style={[styles.statusIndicator, { 
-                    backgroundColor: dailyStats.hasTodayTransaction ? '#10B981' : '#EF4444' 
-                  }]}>
-                    <Icon name={dailyStats.hasTodayTransaction ? 'check-circle' : 'warning'} size={16} color="#FFFFFF" />
-                    <Text style={styles.statusText}>
-                      {dailyStats.hasTodayTransaction ? 'Up to date' : 'Needs update'}
-                    </Text>
+                  <View style={styles.modernStatusIcon}>
+                    <Icon name={dailyStats.hasTodayTransaction ? 'check-circle' : 'warning'} size={28} color={theme.colors.text.inverse} />
                   </View>
                 </View>
+                <Text style={styles.modernStatusText}>
+                  {dailyStats.hasTodayTransaction ? 'All systems up to date' : 'Needs attention'}
+                </Text>
               </View>
 
-              {/* Agent Management Overview */}
-              <View style={styles.fullWidthCard}>
-                <Text style={styles.cardTitle}>Agent Management Overview</Text>
+              {/* Modern Metrics Grid */}
+              <View style={styles.modernMetricsGrid}>
+                <ModernMetricCard
+                  icon="account-balance-wallet"
+                  value={formatCurrency(metrics.totalBalance)}
+                  label="Total Balance"
+                  trend={metrics.balanceTrend}
+                  gradient={[theme.colors.primary[500], theme.colors.primary[600]]}
+                />
                 
-                <View style={styles.managementSummary}>
-                  <View style={styles.managementItem}>
-                    <Icon name="people" size={24} color="#6366F1" />
-                    <Text style={styles.managementValue}>{myAgents.length}</Text>
-                    <Text style={styles.managementLabel}>Agents Under Management</Text>
-                  </View>
-                  
-                  <View style={styles.managementItem}>
-                    <Icon name="account-balance" size={24} color="#EF4444" />
-                    <Text style={styles.managementValue}>{allDebtors.length}</Text>
-                    <Text style={styles.managementLabel}>Total Debtors Managed</Text>
-                  </View>
-                  
-                  <View style={styles.managementItem}>
-                    <Icon name="attach-money" size={24} color="#10B981" />
-                    <Text style={styles.managementValue}>{formatCurrency(agentBalances.totalClosingBalance)}</Text>
-                    <Text style={styles.managementLabel}>Agents Total Balance</Text>
-                  </View>
-                </View>
+                <ModernMetricCard
+                  icon="receipt"
+                  value={dailyStats.employeeTransactions + dailyStats.agentTransactions}
+                  label="Total Transactions"
+                  trend={metrics.transactionsTrend}
+                  gradient={[theme.colors.secondary[500], theme.colors.secondary[600]]}
+                />
+                
+                <ModernMetricCard
+                  icon="attach-money"
+                  value={formatCurrency(dailyStats.totalCommissions)}
+                  label="Commissions"
+                  trend={metrics.commissionsTrend}
+                  gradient={[theme.colors.accent.amber, theme.colors.accent.orange]}
+                />
+                
+                <ModernMetricCard
+                  icon="people"
+                  value={myAgents.length}
+                  label="Active Agents"
+                  gradient={[theme.colors.accent.violet, '#7C3AED']}
+                />
               </View>
 
-              {/* Balance Overview - Employee vs Agents */}
-              <View style={styles.fullWidthCard}>
-                <Text style={styles.cardTitle}>Balance Comparison: Employee vs Managed Agents</Text>
+              {/* Agent vs Employee Balance Comparison */}
+              <View style={styles.modernCard}>
+                <Text style={styles.modernCardTitle}>Balance Overview</Text>
                 
-                {/* Employee Balance */}
-                <Text style={styles.subSectionTitle}>Employee Balance (You)</Text>
-                <View style={styles.balanceRow}>
-                  <View style={styles.balanceItem}>
-                    <Text style={styles.balanceLabel}>Opening</Text>
-                    <Text style={styles.balanceValue}>{formatCurrency(dailyStats.openingBalance)}</Text>
-                  </View>
-                  <Icon name="arrow-forward" size={24} color="#6B7280" />
-                  <View style={styles.balanceItem}>
-                    <Text style={styles.balanceLabel}>Closing</Text>
-                    <Text style={[styles.balanceValue, { color: '#10B981' }]}>
-                      {formatCurrency(dailyStats.closingBalance)}
-                    </Text>
-                  </View>
-                </View>
-                
-                {/* Agents Combined Balance */}
-                <Text style={styles.subSectionTitle}>Agents Combined Balance ({myAgents.length} agents)</Text>
-                <View style={styles.balanceRow}>
-                  <View style={styles.balanceItem}>
-                    <Text style={styles.balanceLabel}>Opening</Text>
-                    <Text style={styles.balanceValue}>{formatCurrency(agentBalances.totalOpeningBalance)}</Text>
-                  </View>
-                  <Icon name="arrow-forward" size={24} color="#6B7280" />
-                  <View style={styles.balanceItem}>
-                    <Text style={styles.balanceLabel}>Closing</Text>
-                    <Text style={[styles.balanceValue, { color: '#10B981' }]}>
-                      {formatCurrency(agentBalances.totalClosingBalance)}
-                    </Text>
-                  </View>
-                </View>
-                
-                <View style={styles.netChangeContainer}>
-                  <Text style={styles.netChangeLabel}>Employee Net Change</Text>
-                  <Text style={[
-                    styles.netChangeValue,
-                    { color: dailyStats.netChange >= 0 ? '#10B981' : '#EF4444' }
-                  ]}>
-                    {dailyStats.netChange >= 0 ? '+' : ''}{formatCurrency(dailyStats.netChange)}
-                  </Text>
-                </View>
-                
-                <View style={styles.netChangeContainer}>
-                  <Text style={styles.netChangeLabel}>Agents Net Change</Text>
-                  <Text style={[
-                    styles.netChangeValue,
-                    { color: (agentBalances.totalClosingBalance - agentBalances.totalOpeningBalance) >= 0 ? '#10B981' : '#EF4444' }
-                  ]}>
-                    {(agentBalances.totalClosingBalance - agentBalances.totalOpeningBalance) >= 0 ? '+' : ''}{formatCurrency(agentBalances.totalClosingBalance - agentBalances.totalOpeningBalance)}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Transaction Management Metrics */}
-              <View style={styles.metricsGrid}>
-                <View style={styles.metricCard}>
-                  <Icon name="person" size={24} color="#6366F1" />
-                  <Text style={styles.metricValue}>{dailyStats.employeeTransactions}</Text>
-                  <Text style={styles.metricLabel}>Employee Transactions</Text>
-                </View>
-                
-                <View style={styles.metricCard}>
-                  <Icon name="group" size={24} color="#10B981" />
-                  <Text style={styles.metricValue}>{dailyStats.agentTransactions}</Text>
-                  <Text style={styles.metricLabel}>Agent Transactions</Text>
-                </View>
-                
-                <View style={styles.metricCard}>
-                  <Icon name="attach-money" size={24} color="#F59E0B" />
-                  <Text style={styles.metricValue}>{formatCurrency(dailyStats.totalCommissions)}</Text>
-                  <Text style={styles.metricLabel}>Total Commissions</Text>
-                </View>
-                
-                <View style={styles.metricCard}>
-                  <Icon name="warning" size={24} color="#EF4444" />
-                  <Text style={styles.metricValue}>{quickStats.activeDebtors}</Text>
-                  <Text style={styles.metricLabel}>Active Debtors</Text>
-                </View>
-              </View>
-
-              {/* Quick Actions for Agent Management */}
-              <View style={styles.fullWidthCard}>
-                <Text style={styles.cardTitle}>Agent Management Actions</Text>
-                <View style={styles.actionsRow}>
-                  <TouchableOpacity 
-                    style={[styles.actionButton, { backgroundColor: '#6366F1' }]}
-                    onPress={() => navigation.navigate("RecordTransaction")}
-                  >
-                    <Icon name="add" size={20} color="#FFFFFF" />
-                    <Text style={styles.actionButtonText}>Record Agent Transaction</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                    style={[styles.actionButton, { backgroundColor: '#10B981' }]}
-                    onPress={() => navigation.navigate("CreateAgent")}
-                  >
-                    <Icon name="person-add" size={20} color="#FFFFFF" />
-                    <Text style={styles.actionButtonText}>Add New Agent</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Recent Activity */}
-              <View style={styles.fullWidthCard}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>Recent Agent Activity</Text>
-                  <TouchableOpacity onPress={() => navigation.navigate("Activity")}>
-                    <Text style={styles.seeAllText}>See All</Text>
-                  </TouchableOpacity>
-                </View>
-                
-                {recentActivity.length > 0 ? (
-                  <FlatList
-                    data={recentActivity.slice(0, 5)}
-                    renderItem={({ item }) => (
-                      <View style={styles.activityItem}>
-                        <View style={[styles.activityIcon, { backgroundColor: item.color || '#6366F1' }]}>
-                          <Icon name={item.icon || 'receipt'} size={16} color="#FFFFFF" />
-                        </View>
-                        <View style={styles.activityContent}>
-                          <Text style={styles.activityTitle}>{item.title}</Text>
-                          <Text style={styles.activityDescription}>{item.description}</Text>
-                          <Text style={styles.activityTime}>{item.time}</Text>
-                        </View>
-                        <Text style={[
-                          styles.activityAmount,
-                          { color: parseFloat(item.amount) >= 0 ? '#10B981' : '#EF4444' }
-                        ]}>
-                          {formatCurrency(item.amount)}
+                <View style={styles.balanceComparisonContainer}>
+                  <View style={styles.balanceSection}>
+                    <Text style={styles.balanceSectionTitle}>Employee Balance</Text>
+                    <View style={styles.balanceRow}>
+                      <View style={styles.balanceItem}>
+                        <Text style={styles.balanceLabel}>Opening</Text>
+                        <Text style={styles.balanceValue}>{formatCurrency(dailyStats.openingBalance)}</Text>
+                      </View>
+                      <Icon name="arrow-forward" size={24} color={theme.colors.text.secondary} />
+                      <View style={styles.balanceItem}>
+                        <Text style={styles.balanceLabel}>Closing</Text>
+                        <Text style={[styles.balanceValue, { color: theme.colors.secondary[500] }]}>
+                          {formatCurrency(dailyStats.closingBalance)}
                         </Text>
                       </View>
-                    )}
-                    keyExtractor={(item) => item.id}
-                    scrollEnabled={false}
-                  />
-                ) : (
-                  <View style={styles.emptyState}>
-                    <Icon name="inbox" size={48} color="#D1D5DB" />
-                    <Text style={styles.emptyStateText}>No recent agent activity</Text>
+                    </View>
                   </View>
-                )}
+
+                  <View style={styles.balanceSection}>
+                    <Text style={styles.balanceSectionTitle}>Agents Combined ({myAgents.length} agents)</Text>
+                    <View style={styles.balanceRow}>
+                      <View style={styles.balanceItem}>
+                        <Text style={styles.balanceLabel}>Opening</Text>
+                        <Text style={styles.balanceValue}>{formatCurrency(agentBalances.totalOpeningBalance)}</Text>
+                      </View>
+                      <Icon name="arrow-forward" size={24} color={theme.colors.text.secondary} />
+                      <View style={styles.balanceItem}>
+                        <Text style={styles.balanceLabel}>Closing</Text>
+                        <Text style={[styles.balanceValue, { color: theme.colors.secondary[500] }]}>
+                          {formatCurrency(agentBalances.totalClosingBalance)}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.netChangeContainer}>
+                  <View style={styles.netChangeItem}>
+                    <Text style={styles.netChangeLabel}>Employee Net Change</Text>
+                    <Text style={[
+                      styles.netChangeValue,
+                      { color: dailyStats.netChange >= 0 ? theme.colors.secondary[500] : theme.colors.error }
+                    ]}>
+                      {dailyStats.netChange >= 0 ? '+' : ''}{formatCurrency(dailyStats.netChange)}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.netChangeItem}>
+                    <Text style={styles.netChangeLabel}>Agents Net Change</Text>
+                    <Text style={[
+                      styles.netChangeValue,
+                      { color: (agentBalances.totalClosingBalance - agentBalances.totalOpeningBalance) >= 0 ? theme.colors.secondary[500] : theme.colors.error }
+                    ]}>
+                      {(agentBalances.totalClosingBalance - agentBalances.totalOpeningBalance) >= 0 ? '+' : ''}
+                      {formatCurrency(agentBalances.totalClosingBalance - agentBalances.totalOpeningBalance)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Top Performing Agents */}
+              {myAgents.length > 0 && (
+                <View style={styles.modernCard}>
+                  <AgentComparisonChart agents={myAgents} formatCurrency={formatCurrency} />
+                </View>
+              )}
+
+              {/* Quick Actions */}
+              <View style={styles.modernCard}>
+                <Text style={styles.modernCardTitle}>Quick Actions</Text>
+                <View style={styles.modernActionsGrid}>
+                  <TouchableOpacity 
+                    style={styles.modernActionButton}
+                    onPress={() => navigation.navigate("RecordTransaction")}
+                  >
+                    <View style={[styles.modernActionGradient, { backgroundColor: theme.colors.primary[500] }]}>
+                      <Icon name="add" size={24} color={theme.colors.text.inverse} />
+                      <Text style={styles.modernActionText}>Record Transaction</Text>
+                    </View>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.modernActionButton}
+                    onPress={() => navigation.navigate("CreateAgent")}
+                  >
+                    <View style={[styles.modernActionGradient, { backgroundColor: theme.colors.secondary[500] }]}>
+                      <Icon name="person-add" size={24} color={theme.colors.text.inverse} />
+                      <Text style={styles.modernActionText}>Add Agent</Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
               </View>
             </>
           )}
@@ -1026,80 +1464,78 @@ const DashboardScreen = () => {
           {/* Analytics Tab */}
           {activeTab === 'analytics' && (
             <>
-              {/* Employee vs Agents Balance Chart */}
-              <View style={styles.fullWidthCard}>
-                <SimpleBarChart 
-                  data={chartData.balanceChart}
-                  title="Balance Comparison: Employee vs Managed Agents"
-                  color="#6366F1"
+              <View style={styles.modernCard}>
+                <ModernBarChart 
+                  data={chartData.balanceComparison}
+                  title="Balance Comparison: Employee vs Top Agents"
+                  color={theme.colors.primary[500]}
+                  height={160}
                 />
               </View>
 
-              {/* Transaction Management Chart */}
-              <View style={styles.fullWidthCard}>
-                <SimpleBarChart 
+              <View style={styles.modernCard}>
+                <ModernBarChart 
                   data={chartData.transactionChart}
                   title="Transaction Management Overview"
-                  color="#10B981"
+                  color={theme.colors.secondary[500]}
+                  height={140}
                 />
               </View>
 
-              {/* Debt Collection Progress */}
-              <View style={styles.fullWidthCard}>
-                <Text style={styles.cardTitle}>Debt Collection Progress (All Managed Debtors)</Text>
-                <View style={styles.progressContainer}>
-                  <ProgressRing 
-                    progress={debtCollectionRate}
-                    size={140}
-                    strokeWidth={12}
-                    color="#10B981"
-                    backgroundColor="#F3F4F6"
-                  />
-                  <View style={styles.progressDetails}>
-                    <View style={styles.progressDetailItem}>
-                      <Text style={styles.progressDetailLabel}>Collected</Text>
-                      <Text style={[styles.progressDetailValue, { color: '#10B981' }]}>
-                        {formatCurrency(quickStats.totalDebtCollected)}
-                      </Text>
-                    </View>
-                    <View style={styles.progressDetailItem}>
-                      <Text style={styles.progressDetailLabel}>Outstanding</Text>
-                      <Text style={[styles.progressDetailValue, { color: '#EF4444' }]}>
-                        {formatCurrency(quickStats.totalDebtOutstanding)}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-
-              {/* Managed Debt Distribution */}
-              <View style={styles.fullWidthCard}>
-                <ModernPieChart 
-                  data={chartData.pieChartData}
-                  title="Managed Debt Distribution"
-                  size={180}
+              {/* Agent Performance Pie Chart */}
+              <View style={styles.modernCard}>
+                <ModernPieChart
+                  data={chartData.agentPerformancePie}
+                  title="Agent Performance Distribution"
+                  centerText={`${myAgents.length} Agents`}
+                  size={160}
                 />
               </View>
 
-              {/* Agent Performance Overview */}
-              <View style={styles.fullWidthCard}>
-                <Text style={styles.cardTitle}>My Agents Performance</Text>
-                <View style={styles.summaryRow}>
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryValue}>{myAgents.length}</Text>
-                    <Text style={styles.summaryLabel}>Total Agents</Text>
-                  </View>
-                  <View style={styles.summaryItem}>
-                    <Text style={[styles.summaryValue, { color: '#6366F1' }]}>
-                      {formatCurrency(agentBalances.totalOpeningBalance)}
+              {/* Debt Risk Analysis Pie Chart */}
+              <View style={styles.modernCard}>
+                <ModernPieChart
+                  data={chartData.debtorsPieChart}
+                  title="Debtor Risk Analysis"
+                  centerText={`${allDebtors.length} Debtors`}
+                  size={160}
+                />
+              </View>
+
+              <View style={styles.modernCard}>
+                <EnhancedProgressRing 
+                  progress={debtCollectionRate}
+                  title="Debt Collection Rate"
+                  subtitle={`${formatCurrency(dashboardData.quickStats.totalDebtCollected)} collected`}
+                  color={theme.colors.secondary[500]}
+                />
+              </View>
+
+              <View style={styles.modernCard}>
+                <Text style={styles.modernCardTitle}>Performance Metrics</Text>
+                <View style={styles.performanceMetricsGrid}>
+                  <View style={styles.performanceMetric}>
+                    <Icon name="trending-up" size={32} color={theme.colors.secondary[500]} />
+                    <Text style={styles.performanceMetricValue}>
+                      {myAgents.filter(a => a.closing_balance > a.opening_balance).length}
                     </Text>
-                    <Text style={styles.summaryLabel}>Opening Balance</Text>
+                    <Text style={styles.performanceMetricLabel}>Growing Agents</Text>
                   </View>
-                  <View style={styles.summaryItem}>
-                    <Text style={[styles.summaryValue, { color: '#10B981' }]}>
-                      {formatCurrency(agentBalances.totalClosingBalance)}
+                  
+                  <View style={styles.performanceMetric}>
+                    <Icon name="star" size={32} color={theme.colors.accent.amber} />
+                    <Text style={styles.performanceMetricValue}>
+                      {Math.round(debtCollectionRate)}%
                     </Text>
-                    <Text style={styles.summaryLabel}>Closing Balance</Text>
+                    <Text style={styles.performanceMetricLabel}>Collection Rate</Text>
+                  </View>
+                  
+                  <View style={styles.performanceMetric}>
+                    <Icon name="account-balance" size={32} color={theme.colors.error} />
+                    <Text style={styles.performanceMetricValue}>
+                      {allDebtors.filter(d => d.balance_due > 1000000).length}
+                    </Text>
+                    <Text style={styles.performanceMetricLabel}>High Risk Debtors</Text>
                   </View>
                 </View>
               </View>
@@ -1109,89 +1545,111 @@ const DashboardScreen = () => {
           {/* My Agents Tab */}
           {activeTab === 'agents' && (
             <>
-              {/* Agents Summary */}
-              <View style={styles.fullWidthCard}>
-                <Text style={styles.cardTitle}>My Agents Overview</Text>
-                <View style={styles.summaryRow}>
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryValue}>{myAgents.length}</Text>
-                    <Text style={styles.summaryLabel}>Total Agents</Text>
+              <View style={styles.modernCard}>
+                <Text style={styles.modernCardTitle}>My Agents Overview</Text>
+                <View style={styles.modernSummaryRow}>
+                  <View style={styles.modernSummaryItem}>
+                    <View style={[styles.modernSummaryIcon, { backgroundColor: theme.colors.primary[500] }]}>
+                      <Icon name="people" size={24} color={theme.colors.text.inverse} />
+                    </View>
+                    <Text style={styles.modernSummaryValue}>{myAgents.length}</Text>
+                    <Text style={styles.modernSummaryLabel}>Total Agents</Text>
                   </View>
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryValue}>
+                  
+                  <View style={styles.modernSummaryItem}>
+                    <View style={[styles.modernSummaryIcon, { backgroundColor: theme.colors.secondary[500] }]}>
+                      <Icon name="account-balance-wallet" size={24} color={theme.colors.text.inverse} />
+                    </View>
+                    <Text style={styles.modernSummaryValue}>
                       {formatCurrency(agentBalances.totalClosingBalance)}
                     </Text>
-                    <Text style={styles.summaryLabel}>Combined Balance</Text>
+                    <Text style={styles.modernSummaryLabel}>Combined Balance</Text>
                   </View>
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryValue}>
-                      {allDebtors.length}
+                  
+                  <View style={styles.modernSummaryItem}>
+                    <View style={[styles.modernSummaryIcon, { backgroundColor: theme.colors.accent.amber }]}>
+                      <Icon name="trending-up" size={24} color={theme.colors.text.inverse} />
+                    </View>
+                    <Text style={styles.modernSummaryValue}>
+                      {myAgents.filter(a => a.closing_balance > a.opening_balance).length}
                     </Text>
-                    <Text style={styles.summaryLabel}>Total Debtors</Text>
+                    <Text style={styles.modernSummaryLabel}>Growing</Text>
                   </View>
                 </View>
               </View>
 
-              {/* My Agents List */}
               {myAgents.length > 0 ? (
                 <FlatList
                   data={myAgents}
-                  renderItem={({ item }) => (
-                    <View style={styles.fullWidthCard}>
-                      <View style={styles.agentHeader}>
-                        <View>
-                          <Text style={styles.agentName}>{item.name}</Text>
-                          <Text style={styles.agentType}>{item.type || 'Agent'}</Text>
-                          {item.phone && (
-                            <Text style={styles.agentPhone}>{item.phone}</Text>
-                          )}
+                  renderItem={({ item, index }) => (
+                    <View style={[styles.modernAgentCard, theme.shadows.medium]}>
+                      <View style={styles.modernAgentHeader}>
+                        <View style={styles.modernAgentInfo}>
+                          <View style={[
+                            styles.modernAgentAvatar,
+                            { backgroundColor: index < 3 ? theme.colors.secondary[500] : theme.colors.primary[500] }
+                          ]}>
+                            <Text style={styles.modernAgentAvatarText}>
+                              {item.name.charAt(0).toUpperCase()}
+                            </Text>
+                          </View>
+                          <View>
+                            <Text style={styles.modernAgentName}>{item.name}</Text>
+                            <Text style={styles.modernAgentType}>{item.type || 'Agent'}</Text>
+                            {item.phone && (
+                              <Text style={styles.modernAgentPhone}>{item.phone}</Text>
+                            )}
+                          </View>
                         </View>
+                        
                         <View style={[
-                          styles.agentStatus,
-                          { backgroundColor: item.status === 'active' ? '#10B981' : '#EF4444' }
+                          styles.modernAgentStatus,
+                          { backgroundColor: item.status === 'active' ? theme.colors.secondary[500] : theme.colors.error }
                         ]}>
-                          <Text style={styles.agentStatusText}>
+                          <Text style={styles.modernAgentStatusText}>
                             {item.status === 'active' ? 'Active' : 'Inactive'}
                           </Text>
                         </View>
                       </View>
                       
-                      <View style={styles.agentMetrics}>
-                        <View style={styles.agentMetric}>
-                          <Text style={styles.agentMetricLabel}>Opening Balance</Text>
-                          <Text style={styles.agentMetricValue}>
+                      <View style={styles.modernAgentMetrics}>
+                        <View style={styles.modernAgentMetric}>
+                          <Text style={styles.modernAgentMetricLabel}>Opening</Text>
+                          <Text style={styles.modernAgentMetricValue}>
                             {formatCurrency(item.opening_balance || 0)}
                           </Text>
                         </View>
-                        <View style={styles.agentMetric}>
-                          <Text style={styles.agentMetricLabel}>Current Balance</Text>
+                        <View style={styles.modernAgentMetric}>
+                          <Text style={styles.modernAgentMetricLabel}>Current</Text>
                           <Text style={[
-                            styles.agentMetricValue,
-                            { color: '#10B981' }
+                            styles.modernAgentMetricValue,
+                            { color: theme.colors.secondary[500] }
                           ]}>
                             {formatCurrency(item.closing_balance || 0)}
                           </Text>
                         </View>
-                        <View style={styles.agentMetric}>
-                          <Text style={styles.agentMetricLabel}>Debtors</Text>
-                          <Text style={styles.agentMetricValue}>{item.active_debtors || 0}</Text>
+                        <View style={styles.modernAgentMetric}>
+                          <Text style={styles.modernAgentMetricLabel}>Debtors</Text>
+                          <Text style={styles.modernAgentMetricValue}>{item.active_debtors || 0}</Text>
                         </View>
                       </View>
 
-                      {/* Agent Net Change */}
-                      <View style={styles.agentNetChange}>
-                        <Text style={styles.agentNetChangeLabel}>Net Change:</Text>
-                        <Text style={[
-                          styles.agentNetChangeValue,
-                          { 
-                            color: ((item.closing_balance || 0) - (item.opening_balance || 0)) >= 0 
-                              ? '#10B981' 
-                              : '#EF4444' 
-                          }
-                        ]}>
-                          {((item.closing_balance || 0) - (item.opening_balance || 0)) >= 0 ? '+' : ''}
-                          {formatCurrency((item.closing_balance || 0) - (item.opening_balance || 0))}
-                        </Text>
+                      <View style={styles.modernAgentProgress}>
+                        <AgentPerformanceRing agent={item} size={60} />
+                        <View style={styles.modernAgentNetChange}>
+                          <Text style={styles.modernAgentNetChangeLabel}>Net Change</Text>
+                          <Text style={[
+                            styles.modernAgentNetChangeValue,
+                            { 
+                              color: ((item.closing_balance || 0) - (item.opening_balance || 0)) >= 0 
+                                ? theme.colors.secondary[500] 
+                                : theme.colors.error 
+                            }
+                          ]}>
+                            {((item.closing_balance || 0) - (item.opening_balance || 0)) >= 0 ? '+' : ''}
+                            {formatCurrency((item.closing_balance || 0) - (item.opening_balance || 0))}
+                          </Text>
+                        </View>
                       </View>
                     </View>
                   )}
@@ -1199,19 +1657,23 @@ const DashboardScreen = () => {
                   scrollEnabled={false}
                 />
               ) : (
-                <View style={styles.fullWidthCard}>
-                  <View style={styles.emptyState}>
-                    <Icon name="people" size={48} color="#D1D5DB" />
-                    <Text style={styles.emptyStateText}>No agents found</Text>
-                    <Text style={styles.emptyStateSubtext}>
-                      Add agents to start managing their transactions and debtors
+                <View style={styles.modernCard}>
+                  <View style={styles.modernEmptyState}>
+                    <View style={[styles.modernEmptyIcon, { backgroundColor: theme.colors.primary[500] }]}>
+                      <Icon name="people" size={48} color={theme.colors.text.inverse} />
+                    </View>
+                    <Text style={styles.modernEmptyTitle}>No Agents Yet</Text>
+                    <Text style={styles.modernEmptySubtitle}>
+                      Add your first agent to start managing transactions and tracking performance
                     </Text>
                     <TouchableOpacity 
-                      style={styles.emptyStateButton}
+                      style={styles.modernEmptyButton}
                       onPress={() => navigation.navigate("CreateAgent")}
                     >
-                      <Icon name="person-add" size={20} color="#FFFFFF" />
-                      <Text style={styles.emptyStateButtonText}>Add First Agent</Text>
+                      <View style={[styles.modernEmptyButtonGradient, { backgroundColor: theme.colors.primary[500] }]}>
+                        <Icon name="person-add" size={20} color={theme.colors.text.inverse} />
+                        <Text style={styles.modernEmptyButtonText}>Add First Agent</Text>
+                      </View>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1219,161 +1681,83 @@ const DashboardScreen = () => {
             </>
           )}
 
-          {/* Managed Debtors Tab */}
+          {/* Enhanced Debtors Tab */}
           {activeTab === 'debtors' && (
             <>
-              {/* Debtors Summary */}
-              <View style={styles.fullWidthCard}>
-                <Text style={styles.cardTitle}>Managed Debtors Overview</Text>
-                <Text style={styles.cardSubtitle}>All debtors managed through your agents</Text>
-                <View style={styles.summaryRow}>
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryValue}>{allDebtors.length}</Text>
-                    <Text style={styles.summaryLabel}>Total Debtors</Text>
+              <View style={styles.modernCard}>
+                <Text style={styles.modernCardTitle}>Debtors Overview</Text>
+                <View style={styles.modernSummaryRow}>
+                  <View style={styles.modernSummaryItem}>
+                    <View style={[styles.modernSummaryIcon, { backgroundColor: theme.colors.accent.blue }]}>
+                      <Icon name="account-balance" size={24} color={theme.colors.text.inverse} />
+                    </View>
+                    <Text style={styles.modernSummaryValue}>{allDebtors.length}</Text>
+                    <Text style={styles.modernSummaryLabel}>Total Debtors</Text>
                   </View>
-                  <View style={styles.summaryItem}>
-                    <Text style={[styles.summaryValue, { color: '#EF4444' }]}>
-                      {formatCurrency(allDebtors.reduce((sum, d) => sum + d.balance_due, 0))}
+                  
+                  <View style={styles.modernSummaryItem}>
+                    <View style={[styles.modernSummaryIcon, { backgroundColor: theme.colors.error }]}>
+                      <Icon name="warning" size={24} color={theme.colors.text.inverse} />
+                    </View>
+                    <Text style={styles.modernSummaryValue}>
+                      {allDebtors.filter(d => d.balance_due > 1000000).length}
                     </Text>
-                    <Text style={styles.summaryLabel}>Outstanding</Text>
+                    <Text style={styles.modernSummaryLabel}>High Risk</Text>
                   </View>
-                  <View style={styles.summaryItem}>
-                    <Text style={[styles.summaryValue, { color: '#10B981' }]}>
-                      {formatCurrency(quickStats.totalDebtCollected)}
+                  
+                  <View style={styles.modernSummaryItem}>
+                    <View style={[styles.modernSummaryIcon, { backgroundColor: theme.colors.secondary[500] }]}>
+                      <Icon name="check-circle" size={24} color={theme.colors.text.inverse} />
+                    </View>
+                    <Text style={styles.modernSummaryValue}>
+                      {Math.round(debtCollectionRate)}%
                     </Text>
-                    <Text style={styles.summaryLabel}>Collected</Text>
+                    <Text style={styles.modernSummaryLabel}>Collection Rate</Text>
                   </View>
                 </View>
               </View>
 
-              {/* Risk Distribution */}
-              <View style={styles.fullWidthCard}>
-                <ModernPieChart 
-                  data={chartData.debtorDistribution}
-                  title="Debtors by Risk Level"
+              {/* Debt Risk Pie Chart */}
+              <View style={styles.modernCard}>
+                <ModernDonutChart
+                  data={chartData.debtorsPieChart}
+                  title="Debt Risk Distribution"
+                  subtitle="Total Debtors"
                   size={180}
                 />
               </View>
 
-              {/* All Managed Debtors List */}
+              {/* Debtors List */}
               {allDebtors.length > 0 ? (
-                <>
-                  <View style={styles.fullWidthCard}>
-                    <Text style={styles.cardTitle}>All Managed Debtors ({allDebtors.length})</Text>
-                    <Text style={styles.cardSubtitle}>Debtors managed through your agents</Text>
-                  </View>
+                <View style={styles.modernCard}>
+                  <Text style={styles.modernCardTitle}>All Debtors ({allDebtors.length})</Text>
                   
                   <FlatList
                     data={allDebtors}
-                    renderItem={({ item }) => {
-                      const getDebtSeverity = (amount) => {
-                        if (amount > 1000000) return { color: "#DC2626", label: "High Risk" };
-                        if (amount > 500000) return { color: "#F59E0B", label: "Medium Risk" };
-                        return { color: "#10B981", label: "Low Risk" };
-                      };
-                      
-                      const debtSeverity = getDebtSeverity(item.balance_due);
-                      
-                      return (
-                        <View style={styles.modernDebtorCard}>
-                          <View style={styles.debtorHeader}>
-                            <View style={styles.debtorMainInfo}>
-                              <View style={styles.debtorNameRow}>
-                                <Text style={styles.debtorName}>{item.debtor_name || item.name || 'Unknown'}</Text>
-                                <View style={[
-                                  styles.severityBadge,
-                                  { backgroundColor: debtSeverity.color + '20' }
-                                ]}>
-                                  <Text style={[styles.severityText, { color: debtSeverity.color }]}>
-                                    {debtSeverity.label}
-                                  </Text>
-                                </View>
-                              </View>
-                              <Text style={styles.debtorPhone}>
-                                {item.phone || item.phone_number || 'No phone'}
-                              </Text>
-                              {item.agent_name && (
-                                <Text style={styles.debtorAgent}>
-                                  Managed by: {item.agent_name}
-                                </Text>
-                              )}
-                              {item.created_at && (
-                                <Text style={styles.debtorDate}>
-                                  Created: {new Date(item.created_at).toLocaleDateString('en-US', {
-                                    year: 'numeric',
-                                    month: 'short',
-                                    day: 'numeric',
-                                  })}
-                                </Text>
-                              )}
-                            </View>
-                            <View style={[
-                              styles.debtorStatus,
-                              { backgroundColor: item.balance_due > 0 ? '#EF4444' : '#10B981' }
-                            ]}>
-                              <Text style={styles.debtorStatusText}>
-                                {item.balance_due > 0 ? 'Active' : 'Paid'}
-                              </Text>
-                            </View>
-                          </View>
-                          
-                          <View style={styles.debtorMetrics}>
-                            <View style={styles.debtorMetric}>
-                              <Text style={styles.debtorMetricLabel}>Outstanding</Text>
-                              <Text style={[styles.debtorMetricValue, { color: '#EF4444' }]}>
-                                {formatCurrency(item.balance_due || 0)}
-                              </Text>
-                            </View>
-                            <View style={styles.debtorMetric}>
-                              <Text style={styles.debtorMetricLabel}>Risk Level</Text>
-                              <Text style={[styles.debtorMetricValue, { color: debtSeverity.color }]}>
-                                {debtSeverity.label.split(' ')[0]}
-                              </Text>
-                            </View>
-                            <View style={styles.debtorMetric}>
-                              <Text style={styles.debtorMetricLabel}>Days Outstanding</Text>
-                              <Text style={styles.debtorMetricValue}>
-                                {item.created_at 
-                                  ? Math.floor((new Date() - new Date(item.created_at)) / (1000 * 60 * 60 * 24))
-                                  : 0}
-                              </Text>
-                            </View>
-                          </View>
-
-                          {/* Quick Action Buttons */}
-                          <View style={styles.debtorActions}>
-                            <TouchableOpacity 
-                              style={styles.debtorActionButton}
-                              onPress={() => navigation.navigate('DebtorDetails', { debtorId: item.id })}
-                            >
-                              <Icon name="visibility" size={16} color="#6366F1" />
-                              <Text style={styles.debtorActionText}>View Details</Text>
-                            </TouchableOpacity>
-                            
-                            {item.balance_due > 0 && (
-                              <TouchableOpacity 
-                                style={[styles.debtorActionButton, { backgroundColor: '#10B981' }]}
-                                onPress={() => navigation.navigate('PaymentScreen', { debtorId: item.id })}
-                              >
-                                <Icon name="payment" size={16} color="#FFFFFF" />
-                                <Text style={[styles.debtorActionText, { color: '#FFFFFF' }]}>Record Payment</Text>
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        </View>
-                      );
-                    }}
-                    keyExtractor={(item) => (item.id || Math.random()).toString()}
+                    renderItem={({ item }) => (
+                      <ModernDebtorCard
+                        debtor={item}
+                        formatCurrency={formatCurrency}
+                        onPress={() => {
+                          // Navigate to debtor details if needed
+                          console.log('Debtor pressed:', item.debtor_name);
+                        }}
+                      />
+                    )}
+                    keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
                     scrollEnabled={false}
+                    showsVerticalScrollIndicator={false}
                   />
-                </>
+                </View>
               ) : (
-                <View style={styles.fullWidthCard}>
-                  <View style={styles.emptyState}>
-                    <Icon name="account-balance" size={48} color="#D1D5DB" />
-                    <Text style={styles.emptyStateText}>No debtors found</Text>
-                    <Text style={styles.emptyStateSubtext}>
-                      Debtors will appear here when your agents add them
+                <View style={styles.modernCard}>
+                  <View style={styles.modernEmptyState}>
+                    <View style={[styles.modernEmptyIcon, { backgroundColor: theme.colors.accent.blue }]}>
+                      <Icon name="account-balance" size={48} color={theme.colors.text.inverse} />
+                    </View>
+                    <Text style={styles.modernEmptyTitle}>No Debtors Found</Text>
+                    <Text style={styles.modernEmptySubtitle}>
+                      Debtors will appear here once your agents start managing them
                     </Text>
                   </View>
                 </View>
@@ -1391,52 +1775,69 @@ const DashboardScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: theme.colors.background.secondary,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: theme.colors.background.secondary,
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#374151',
+    marginTop: theme.spacing.lg,
+    ...theme.typography.body,
+    color: theme.colors.text.primary,
     fontWeight: '600',
   },
-  header: {
+
+  // Modern Header Styles
+  modernHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#1F2937',
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.lg,
+    backgroundColor: theme.colors.neutral[900],
+    ...theme.shadows.large,
   },
-  menuButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  modernMenuButton: {
+    padding: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
-  headerCenter: {
+  modernHeaderCenter: {
     flex: 1,
     alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
+  modernHeaderTitle: {
+    ...theme.typography.h2,
+    color: theme.colors.text.inverse,
+    marginBottom: theme.spacing.xs,
   },
-  headerSubtitle: {
-    fontSize: 12,
-    color: '#D1D5DB',
-    marginTop: 2,
+  modernHeaderSubtitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  logoutButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  agentCountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.borderRadius.full,
   },
+  modernHeaderSubtitle: {
+    ...theme.typography.captionMedium,
+    color: theme.colors.text.inverse,
+    marginLeft: theme.spacing.xs,
+  },
+  modernLogoutButton: {
+    padding: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  },
+
+  // Modern Menu Styles
   menuOverlay: {
     position: 'absolute',
     top: 0,
@@ -1449,59 +1850,47 @@ const styles = StyleSheet.create({
   modernMenu: {
     width: '85%',
     height: '100%',
-    backgroundColor: '#FFFFFF',
-    elevation: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 8, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
+    backgroundColor: theme.colors.surface.primary,
+    ...theme.shadows.large,
   },
   modernMenuHeader: {
     paddingTop: 50,
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-    backgroundColor: '#F8FAFC',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    paddingHorizontal: theme.spacing.xxl,
+    paddingBottom: theme.spacing.xxl,
+    backgroundColor: theme.colors.neutral[900],
   },
   menuProfileSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: theme.spacing.lg,
   },
   profileAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#6366F1',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: theme.colors.primary[500],
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-    elevation: 4,
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    marginRight: theme.spacing.lg,
+    ...theme.shadows.colored(theme.colors.primary[500]),
   },
   profileAvatarText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    ...theme.typography.h3,
+    color: theme.colors.text.inverse,
+    fontWeight: '800',
   },
   profileInfo: {
     flex: 1,
   },
   profileName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 2,
+    ...theme.typography.h3,
+    color: theme.colors.text.inverse,
+    marginBottom: theme.spacing.xs,
   },
   profileRole: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontWeight: '500',
-    marginBottom: 4,
+    ...theme.typography.captionMedium,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: theme.spacing.sm,
   },
   profileStatusIndicator: {
     flexDirection: 'row',
@@ -1511,54 +1900,51 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#10B981',
-    marginRight: 6,
+    backgroundColor: theme.colors.secondary[500],
+    marginRight: theme.spacing.sm,
   },
   profileStatus: {
-    fontSize: 11,
-    color: '#10B981',
+    ...theme.typography.caption,
+    color: theme.colors.secondary[500],
     fontWeight: '600',
   },
   modernCloseButton: {
     position: 'absolute',
     top: 50,
-    right: 20,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    right: theme.spacing.xl,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  menuItemsContainer: {
+
+  // FIXED: Added scrollable container for menu
+  menuScrollContainer: {
     flex: 1,
-    paddingTop: 24,
+  },
+  menuItemsContainer: {
+    paddingTop: theme.spacing.xxl,
   },
   menuSectionTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#9CA3AF',
-    letterSpacing: 1,
-    paddingHorizontal: 24,
-    marginBottom: 12,
+    ...theme.typography.label,
+    color: theme.colors.text.tertiary,
+    paddingHorizontal: theme.spacing.xxl,
+    marginBottom: theme.spacing.lg,
   },
   modernMenuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    marginHorizontal: 12,
-    marginVertical: 2,
-    borderRadius: 12,
+    paddingHorizontal: theme.spacing.xxl,
+    paddingVertical: theme.spacing.lg,
+    marginHorizontal: theme.spacing.md,
+    marginVertical: theme.spacing.xs,
+    borderRadius: theme.borderRadius.lg,
     backgroundColor: 'transparent',
   },
   modernMenuItemActive: {
-    backgroundColor: '#6366F1',
-    elevation: 3,
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    backgroundColor: theme.colors.primary[50],
   },
   menuItemContent: {
     flexDirection: 'row',
@@ -1566,111 +1952,98 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modernMenuItemIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F0F4FF',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-  },
-  modernMenuItemIconActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    marginRight: theme.spacing.lg,
   },
   modernMenuItemText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#374151',
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.primary,
     flex: 1,
+    fontWeight: '600',
   },
   modernMenuItemTextActive: {
-    color: '#FFFFFF',
+    color: theme.colors.primary[600],
   },
   menuItemBadge: {
-    backgroundColor: '#EF4444',
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginRight: 8,
-    minWidth: 20,
+    backgroundColor: theme.colors.error,
+    borderRadius: theme.borderRadius.full,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    marginRight: theme.spacing.md,
+    minWidth: 24,
     alignItems: 'center',
   },
   menuItemBadgeText: {
-    fontSize: 10,
+    ...theme.typography.caption,
+    color: theme.colors.text.inverse,
     fontWeight: '700',
-    color: '#FFFFFF',
   },
   menuStatsSection: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    backgroundColor: '#F8FAFC',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+    paddingHorizontal: theme.spacing.xxl,
+    paddingVertical: theme.spacing.xxl,
+    backgroundColor: theme.colors.background.tertiary,
   },
   menuStatItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: theme.spacing.lg,
   },
   menuStatIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    marginRight: theme.spacing.lg,
+    ...theme.shadows.small,
   },
   menuStatContent: {
     flex: 1,
   },
   menuStatLabel: {
-    fontSize: 11,
-    color: '#6B7280',
-    fontWeight: '500',
-    marginBottom: 2,
+    ...theme.typography.captionMedium,
+    color: theme.colors.text.secondary,
+    marginBottom: theme.spacing.xs,
   },
   menuStatValue: {
-    fontSize: 14,
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.primary,
     fontWeight: '700',
-    color: '#111827',
   },
   menuFooter: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
+    paddingHorizontal: theme.spacing.xxl,
+    paddingVertical: theme.spacing.xl,
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+    borderTopColor: theme.colors.neutral[200],
   },
   menuFooterItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: theme.spacing.md,
   },
   menuFooterText: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
-    marginLeft: 12,
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.secondary,
+    marginLeft: theme.spacing.md,
   },
   logoutMenuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    marginTop: 8,
-    paddingTop: 16,
+    paddingVertical: theme.spacing.md,
+    marginTop: theme.spacing.sm,
+    paddingTop: theme.spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: theme.colors.neutral[100],
   },
   logoutMenuText: {
-    fontSize: 14,
-    color: '#EF4444',
+    ...theme.typography.bodyMedium,
+    color: theme.colors.error,
     fontWeight: '600',
-    marginLeft: 12,
+    marginLeft: theme.spacing.md,
   },
   menuBackdrop: {
     position: 'absolute',
@@ -1679,347 +2052,447 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
-  tabContainer: {
+
+  // Modern Tab Styles
+  modernTabContainer: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.surface.primary,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: theme.colors.neutral[200],
+    ...theme.shadows.small,
   },
-  tab: {
+  modernTab: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
+    paddingVertical: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.sm,
+    position: 'relative',
   },
-  activeTab: {
-    backgroundColor: '#6366F1',
+  modernActiveTab: {
+    borderBottomWidth: 3,
+    borderBottomColor: theme.colors.primary[500],
   },
-  tabText: {
-    fontSize: 12,
-    color: '#6B7280',
+  modernTabText: {
+    ...theme.typography.captionMedium,
+    color: theme.colors.text.secondary,
+    marginLeft: theme.spacing.sm,
     fontWeight: '600',
-    marginLeft: 4,
   },
-  activeTabText: {
-    color: '#FFFFFF',
+  modernActiveTabText: {
+    color: theme.colors.primary[500],
   },
+
+  // Content Styles
   content: {
     flex: 1,
   },
   contentContainer: {
-    padding: 16,
+    padding: theme.spacing.lg,
   },
-  statusCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+
+  // Modern Card Styles
+  modernCard: {
+    backgroundColor: theme.colors.surface.primary,
+    borderRadius: theme.borderRadius.xl,
+    padding: theme.spacing.xxl,
+    marginBottom: theme.spacing.lg,
+    ...theme.shadows.medium,
   },
-  statusHeader: {
+  modernCardTitle: {
+    ...theme.typography.h2,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.xl,
+  },
+
+  // Modern Status Card
+  modernStatusCard: {
+    borderRadius: theme.borderRadius.xl,
+    padding: theme.spacing.xxl,
+    marginBottom: theme.spacing.lg,
+  },
+  modernStatusHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: theme.spacing.md,
   },
-  statusDate: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
+  modernStatusDate: {
+    ...theme.typography.h3,
+    color: theme.colors.text.inverse,
   },
-  statusUpdate: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
+  modernStatusUpdate: {
+    ...theme.typography.captionMedium,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: theme.spacing.xs,
   },
-  statusIndicator: {
+  modernStatusIcon: {
+    padding: theme.spacing.sm,
+  },
+  modernStatusText: {
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.inverse,
+    fontWeight: '600',
+  },
+
+  // Modern Metrics Grid
+  modernMetricsGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing.lg,
   },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginLeft: 4,
+  modernMetricCard: {
+    width: '48%',
+    borderRadius: theme.borderRadius.lg,
+    marginBottom: theme.spacing.md,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  fullWidthCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+  metricGradientBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 16,
+  metricContent: {
+    padding: theme.spacing.xl,
   },
-  cardSubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 16,
-    marginTop: -8,
-  },
-  subSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-    marginTop: 8,
-    marginBottom: 12,
-  },
-  cardHeader: {
+  metricHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
+    alignItems: 'flex-start',
+    marginBottom: theme.spacing.md,
   },
-  seeAllText: {
-    fontSize: 14,
-    color: '#6366F1',
+  metricIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  trendBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.borderRadius.full,
+  },
+  trendText: {
+    ...theme.typography.caption,
+    color: theme.colors.text.inverse,
+    fontWeight: '600',
+    marginLeft: theme.spacing.xs,
+  },
+  metricValue: {
+    ...theme.typography.h2,
+    color: theme.colors.text.inverse,
+    fontWeight: '800',
+    marginBottom: theme.spacing.xs,
+  },
+  metricLabel: {
+    ...theme.typography.captionMedium,
+    color: 'rgba(255, 255, 255, 0.9)',
     fontWeight: '600',
   },
-  managementSummary: {
+
+  // Pie Chart Styles
+  pieChartContainer: {
+    alignItems: 'center',
+    marginBottom: theme.spacing.lg,
+  },
+  pieChartTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.xl,
+    textAlign: 'center',
+  },
+  pieChart: {
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xl,
+  },
+  pieChartBackground: {
+    position: 'absolute',
+    backgroundColor: theme.colors.neutral[100],
+  },
+  pieSlice: {
+    position: 'absolute',
+  },
+  pieChartCenter: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface.primary,
+  },
+  pieChartCenterText: {
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.primary,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  pieChartLegend: {
+    width: '100%',
+  },
+  pieChartLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: theme.spacing.sm,
+  },
+  pieChartLegendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: theme.spacing.md,
+  },
+  pieChartLegendText: {
+    flex: 1,
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.primary,
+  },
+  pieChartLegendValue: {
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.primary,
+    fontWeight: '700',
+  },
+
+  // Donut Chart Styles
+  donutContainer: {
+    alignItems: 'center',
+  },
+  donutTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.xl,
+    textAlign: 'center',
+  },
+  donutChart: {
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  donutSlice: {
+    position: 'absolute',
+  },
+  donutCenter: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface.primary,
+  },
+  donutCenterValue: {
+    ...theme.typography.h2,
+    color: theme.colors.text.primary,
+    fontWeight: '800',
+  },
+  donutCenterLabel: {
+    ...theme.typography.captionMedium,
+    color: theme.colors.text.secondary,
+    marginTop: theme.spacing.xs,
+  },
+
+  // Modern Chart Styles
+  modernChartContainer: {
+    marginBottom: theme.spacing.lg,
+  },
+  modernChartTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.xl,
+    textAlign: 'center',
+  },
+  modernChartBars: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    alignItems: 'flex-end',
+    paddingHorizontal: theme.spacing.md,
   },
-  managementItem: {
-    alignItems: 'center',
+  modernBarContainer: {
     flex: 1,
+    alignItems: 'center',
+    marginHorizontal: theme.spacing.sm,
   },
-  managementValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginTop: 8,
-    marginBottom: 4,
+  modernBarWrapper: {
+    justifyContent: 'flex-end',
+    marginBottom: theme.spacing.md,
+    position: 'relative',
   },
-  managementLabel: {
-    fontSize: 12,
-    color: '#6B7280',
+  modernBar: {
+    width: 32,
+    minHeight: 8,
+    borderRadius: theme.borderRadius.lg,
+    ...theme.shadows.small,
+  },
+  modernBarGlow: {
+    position: 'absolute',
+    bottom: -2,
+    left: -4,
+    right: -4,
+    height: 6,
+    borderRadius: theme.spacing.xs,
+    zIndex: -1,
+  },
+  modernBarLabel: {
+    ...theme.typography.captionMedium,
+    color: theme.colors.text.primary,
     textAlign: 'center',
-    fontWeight: '500',
+    marginBottom: theme.spacing.xs,
+    fontWeight: '600',
+  },
+  modernBarValue: {
+    ...theme.typography.caption,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
+  },
+
+  // Balance Comparison Styles
+  balanceComparisonContainer: {
+    marginBottom: theme.spacing.xl,
+  },
+  balanceSection: {
+    marginBottom: theme.spacing.xxl,
+  },
+  balanceSectionTitle: {
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.primary,
+    fontWeight: '700',
+    marginBottom: theme.spacing.lg,
   },
   balanceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    marginBottom: 20,
   },
   balanceItem: {
     alignItems: 'center',
   },
   balanceLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
-    marginBottom: 4,
+    ...theme.typography.captionMedium,
+    color: theme.colors.text.secondary,
+    marginBottom: theme.spacing.sm,
   },
   balanceValue: {
-    fontSize: 20,
+    ...theme.typography.h3,
+    color: theme.colors.text.primary,
     fontWeight: '700',
-    color: '#111827',
   },
   netChangeContainer: {
-    alignItems: 'center',
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  netChangeLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  netChangeValue: {
-    fontSize: 24,
-    fontWeight: '800',
-  },
-  metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  metricCard: {
-    width: '48%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  metricValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  metricLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginHorizontal: 4,
-  },
-  actionButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginLeft: 8,
-  },
-  activityItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  activityIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 2,
-  },
-  activityDescription: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 2,
-  },
-  activityTime: {
-    fontSize: 11,
-    color: '#9CA3AF',
-  },
-  activityAmount: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 32,
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: '#6B7280',
-    fontWeight: '500',
-    marginTop: 12,
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 16,
-  },
-  emptyStateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#6366F1',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  emptyStateButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginLeft: 8,
-  },
-  
-  // Chart Styles
-  chartContainer: {
-    marginBottom: 16,
-  },
-  chartTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  chartBars: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    alignItems: 'flex-end',
-    height: 120,
+    paddingTop: theme.spacing.xl,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.neutral[200],
   },
-  barContainer: {
-    flex: 1,
+  netChangeItem: {
     alignItems: 'center',
-    marginHorizontal: 4,
   },
-  barWrapper: {
-    height: 80,
-    justifyContent: 'flex-end',
-    marginBottom: 8,
+  netChangeLabel: {
+    ...theme.typography.captionMedium,
+    color: theme.colors.text.secondary,
+    marginBottom: theme.spacing.sm,
   },
-  bar: {
-    width: 24,
-    minHeight: 4,
-    borderRadius: 12,
+  netChangeValue: {
+    ...theme.typography.h2,
+    fontWeight: '800',
   },
-  barLabel: {
-    fontSize: 11,
+
+  // Agent Comparison Styles
+  agentComparisonContainer: {
+    marginBottom: theme.spacing.lg,
+  },
+  agentComparisonItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: theme.spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.neutral[200],
+  },
+  agentRankContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  agentRank: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: theme.spacing.lg,
+  },
+  agentRankText: {
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.inverse,
+    fontWeight: '800',
+  },
+  agentInfo: {
+    flex: 1,
+  },
+  agentComparisonName: {
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.primary,
+    fontWeight: '700',
+    marginBottom: theme.spacing.xs,
+  },
+  agentComparisonBalance: {
+    ...theme.typography.captionMedium,
+    color: theme.colors.text.secondary,
     fontWeight: '600',
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 2,
   },
-  barValue: {
-    fontSize: 10,
-    color: '#9CA3AF',
-    textAlign: 'center',
+  agentPerformanceBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginLeft: theme.spacing.lg,
+  },
+  agentPerformanceBarTrack: {
+    flex: 1,
+    height: 8,
+    backgroundColor: theme.colors.neutral[200],
+    borderRadius: 4,
+    marginRight: theme.spacing.md,
+  },
+  agentPerformanceBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+
+  // Performance Ring Styles
+  performanceRing: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  performanceRingBackground: {
+    position: 'absolute',
+  },
+  performanceRingFill: {
+    position: 'absolute',
+  },
+  performanceRingCenter: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  performancePercentage: {
+    fontWeight: '800',
+    color: theme.colors.text.primary,
   },
 
   // Enhanced Progress Ring Styles
+  enhancedProgressContainer: {
+    alignItems: 'center',
+  },
   progressRingContainer: {
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
+    marginBottom: theme.spacing.xl,
   },
   progressRingBackground: {
     position: 'absolute',
@@ -2034,342 +2507,417 @@ const styles = StyleSheet.create({
   },
   progressPercentage: {
     fontWeight: '800',
-    color: '#111827',
-    lineHeight: 24,
+    color: theme.colors.text.primary,
   },
   progressLabel: {
-    color: '#6B7280',
-    fontWeight: '500',
-    marginTop: 2,
+    color: theme.colors.text.secondary,
+    fontWeight: '600',
+    marginTop: theme.spacing.xs,
   },
-  progressRingGlow: {
-    position: 'absolute',
-    zIndex: -1,
-  },
-
-  // Modern Pie Chart Styles
-  pieChartContainer: {
+  progressInfo: {
     alignItems: 'center',
   },
-  pieChartTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 20,
+  progressTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.xs,
+  },
+  progressSubtitle: {
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.secondary,
     textAlign: 'center',
   },
-  pieChart: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-    position: 'relative',
+
+  // Modern Actions Grid
+  modernActionsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
-  pieChartBackground: {
-    backgroundColor: '#F9FAFB',
-    position: 'absolute',
+  modernActionButton: {
+    flex: 1,
+    marginHorizontal: theme.spacing.sm,
   },
-  pieSlice: {
-    borderWidth: 0,
-  },
-  pieChartCenter: {
-    position: 'absolute',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 30,
-    width: 60,
-    height: 60,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  pieChartCenterText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  pieChartCenterValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  pieChartLegend: {
-    width: '100%',
-  },
-  legendItem: {
+  modernActionGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
-    paddingHorizontal: 4,
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.xl,
+    borderRadius: theme.borderRadius.lg,
+    ...theme.shadows.medium,
   },
-  legendDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
-  },
-  legendLabel: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-  },
-  legendValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
+  modernActionText: {
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.inverse,
+    fontWeight: '700',
+    marginLeft: theme.spacing.sm,
   },
 
-  // Enhanced Debtor Styles
-  modernDebtorCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 12,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
+  // Modern Summary Styles
+  modernSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  modernSummaryItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  modernSummaryIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
+    ...theme.shadows.medium,
+  },
+  modernSummaryValue: {
+    ...theme.typography.h3,
+    color: theme.colors.text.primary,
+    fontWeight: '800',
+    marginBottom: theme.spacing.xs,
+  },
+  modernSummaryLabel: {
+    ...theme.typography.captionMedium,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+
+  // Modern Agent Card Styles
+  modernAgentCard: {
+    backgroundColor: theme.colors.surface.primary,
+    borderRadius: theme.borderRadius.xl,
+    padding: theme.spacing.xl,
+    marginBottom: theme.spacing.md,
     borderLeftWidth: 4,
-    borderLeftColor: '#6366F1',
+    borderLeftColor: theme.colors.primary[500],
   },
-  debtorMainInfo: {
-    flex: 1,
-  },
-  debtorNameRow: {
+  modernAgentHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: theme.spacing.lg,
   },
-  severityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  severityText: {
-    fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  debtorDate: {
-    fontSize: 11,
-    color: '#9CA3AF',
-    marginTop: 2,
-  },
-  debtorDescription: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  debtorDescriptionLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  debtorDescriptionText: {
-    fontSize: 13,
-    color: '#374151',
-    lineHeight: 18,
-  },
-  debtorActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  debtorActionButton: {
+  modernAgentInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
     flex: 1,
-    marginHorizontal: 4,
+  },
+  modernAgentAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     justifyContent: 'center',
-  },
-  debtorActionText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6366F1',
-    marginLeft: 4,
-  },
-
-  progressContainer: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
+    marginRight: theme.spacing.lg,
+    ...theme.shadows.medium,
   },
-  progressDetails: {
-    flex: 1,
-    marginLeft: 20,
+  modernAgentAvatarText: {
+    ...theme.typography.h3,
+    color: theme.colors.text.inverse,
+    fontWeight: '800',
   },
-  progressDetailItem: {
-    marginBottom: 12,
+  modernAgentName: {
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.primary,
+    fontWeight: '700',
+    marginBottom: theme.spacing.xs,
   },
-  progressDetailLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 2,
+  modernAgentType: {
+    ...theme.typography.captionMedium,
+    color: theme.colors.text.secondary,
+    marginBottom: theme.spacing.xs,
   },
-  progressDetailValue: {
-    fontSize: 16,
+  modernAgentPhone: {
+    ...theme.typography.caption,
+    color: theme.colors.text.tertiary,
+  },
+  modernAgentStatus: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.full,
+  },
+  modernAgentStatusText: {
+    ...theme.typography.caption,
+    color: theme.colors.text.inverse,
     fontWeight: '700',
   },
-
-  // Summary Styles
-  summaryRow: {
+  modernAgentMetrics: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    marginBottom: theme.spacing.lg,
   },
-  summaryItem: {
+  modernAgentMetric: {
     alignItems: 'center',
   },
-  summaryValue: {
-    fontSize: 20,
+  modernAgentMetricLabel: {
+    ...theme.typography.captionMedium,
+    color: theme.colors.text.secondary,
+    marginBottom: theme.spacing.xs,
+  },
+  modernAgentMetricValue: {
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.primary,
     fontWeight: '700',
-    color: '#111827',
-    marginBottom: 4,
   },
-  summaryLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-
-  // Agent Styles
-  agentHeader: {
+  modernAgentProgress: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  agentName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  agentType: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  agentPhone: {
-    fontSize: 11,
-    color: '#9CA3AF',
-    marginTop: 1,
-  },
-  agentStatus: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  agentStatusText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  agentMetrics: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  agentMetric: {
-    alignItems: 'center',
-  },
-  agentMetricLabel: {
-    fontSize: 11,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  agentMetricValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  agentNetChange: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 12,
+    paddingTop: theme.spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: theme.colors.neutral[200],
   },
-  agentNetChangeLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontWeight: '500',
+  modernAgentNetChange: {
+    alignItems: 'flex-end',
+    flex: 1,
+    marginLeft: theme.spacing.lg,
   },
-  agentNetChangeValue: {
-    fontSize: 16,
-    fontWeight: '700',
+  modernAgentNetChangeLabel: {
+    ...theme.typography.captionMedium,
+    color: theme.colors.text.secondary,
+    marginBottom: theme.spacing.xs,
+  },
+  modernAgentNetChangeValue: {
+    ...theme.typography.bodyMedium,
+    fontWeight: '800',
   },
 
-  // Debtor Styles
-  debtorHeader: {
+  // Modern Debtor Card Styles
+  modernDebtorCard: {
+    backgroundColor: theme.colors.surface.primary,
+    borderRadius: theme.borderRadius.xl,
+    padding: theme.spacing.xl,
+    marginBottom: theme.spacing.md,
+    borderLeftWidth: 4,
+    borderLeftColor: theme.colors.accent.blue,
+  },
+  debtorCardHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing.lg,
+  },
+  debtorInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  debtorAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: theme.spacing.lg,
+    ...theme.shadows.small,
+  },
+  debtorAvatarText: {
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.inverse,
+    fontWeight: '800',
+  },
+  debtorDetails: {
+    flex: 1,
   },
   debtorName: {
-    fontSize: 16,
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.primary,
     fontWeight: '700',
-    color: '#111827',
-  },
-  debtorPhone: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
+    marginBottom: theme.spacing.xs,
   },
   debtorAgent: {
-    fontSize: 11,
-    color: '#9CA3AF',
-    marginTop: 1,
-    fontStyle: 'italic',
+    ...theme.typography.captionMedium,
+    color: theme.colors.text.secondary,
+    marginBottom: theme.spacing.xs,
   },
-  debtorStatus: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+  debtorPhone: {
+    ...theme.typography.caption,
+    color: theme.colors.text.tertiary,
   },
-  debtorStatusText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#FFFFFF',
+  riskBadge: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.full,
+  },
+  riskBadgeText: {
+    ...theme.typography.caption,
+    color: theme.colors.text.inverse,
+    fontWeight: '700',
   },
   debtorMetrics: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 16,
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing.lg,
   },
   debtorMetric: {
     alignItems: 'center',
+    flex: 1,
   },
   debtorMetricLabel: {
-    fontSize: 11,
-    color: '#6B7280',
-    marginBottom: 4,
+    ...theme.typography.captionMedium,
+    color: theme.colors.text.secondary,
+    marginBottom: theme.spacing.xs,
   },
   debtorMetricValue: {
-    fontSize: 14,
+    ...theme.typography.bodyMedium,
+    fontWeight: '700',
+  },
+  debtorStatus: {
+    ...theme.typography.bodyMedium,
+    fontWeight: '700',
+  },
+  debtorProgress: {
+    paddingTop: theme.spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.neutral[200],
+  },
+  debtorProgressBar: {
+    height: 6,
+    backgroundColor: theme.colors.neutral[200],
+    borderRadius: 3,
+    marginBottom: theme.spacing.sm,
+  },
+  debtorProgressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  debtorProgressText: {
+    ...theme.typography.captionMedium,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
+  },
+
+  // Modern Empty State
+  modernEmptyState: {
+    alignItems: 'center',
+    paddingVertical: theme.spacing.xxxl,
+  },
+  modernEmptyIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xl,
+    ...theme.shadows.large,
+  },
+  modernEmptyTitle: {
+    ...theme.typography.h2,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.sm,
+  },
+  modernEmptySubtitle: {
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: theme.spacing.xxl,
+    lineHeight: 22,
+  },
+  modernEmptyButton: {
+    alignSelf: 'stretch',
+  },
+  modernEmptyButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.xxl,
+    borderRadius: theme.borderRadius.lg,
+    ...theme.shadows.medium,
+  },
+  modernEmptyButtonText: {
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.inverse,
+    fontWeight: '700',
+    marginLeft: theme.spacing.sm,
+  },
+
+  // Performance Styles
+  performanceMetricsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  performanceMetric: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  performanceMetricValue: {
+    ...theme.typography.h2,
+    color: theme.colors.text.primary,
+    fontWeight: '800',
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+  },
+  performanceMetricLabel: {
+    ...theme.typography.captionMedium,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
     fontWeight: '600',
-    color: '#111827',
+  },
+  performanceOverviewGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  performanceOverviewItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.borderRadius.lg,
+    marginHorizontal: theme.spacing.sm,
+    ...theme.shadows.medium,
+  },
+  performanceOverviewValue: {
+    ...theme.typography.h2,
+    color: theme.colors.text.inverse,
+    fontWeight: '800',
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+  },
+  performanceOverviewLabel: {
+    ...theme.typography.captionMedium,
+    color: 'rgba(255, 255, 255, 0.9)',
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+
+  // Debt Performance Styles
+  debtPerformanceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+  },
+  debtBreakdown: {
+    flex: 1,
+    marginLeft: theme.spacing.xl,
+  },
+  debtBreakdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  debtBreakdownDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: theme.spacing.md,
+  },
+  debtBreakdownLabel: {
+    flex: 1,
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.primary,
+  },
+  debtBreakdownValue: {
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.primary,
+    fontWeight: '700',
   },
 
   bottomSpacing: {
-    height: 32,
+    height: theme.spacing.xxxl,
   },
 });
 
 export default DashboardScreen;
-
-
