@@ -14,24 +14,45 @@ import {
   Alert,
   Animated,
   Easing,
+  Modal,
+  ScrollView,
 } from "react-native";
 import { MaterialIcons, FontAwesome, Ionicons } from "@expo/vector-icons";
 import moment from "moment";
 import { getTransactions } from "../services/api";
 import { getUserData } from "../services/auth";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isTablet = width > 768;
+const isLargeScreen = width > 1024;
+
+// Responsive dimensions
+const getResponsiveDimensions = () => {
+  const screenWidth = width;
+  const padding = isTablet ? 24 : 16;
+  const cardMargin = isTablet ? 16 : 12;
+  const headerFontSize = isTablet ? 28 : 24;
+  const cardFontSize = isTablet ? 18 : 16;
+  
+  return {
+    screenWidth,
+    padding,
+    cardMargin,
+    headerFontSize,
+    cardFontSize,
+    summaryCardWidth: isLargeScreen ? "30%" : isTablet ? "45%" : "48%",
+    totalBoxWidth: isLargeScreen ? "30%" : isTablet ? "45%" : "48%",
+  };
+};
 
 const TransactionCard = ({ transaction }) => {
-  // Your data doesn't have `type` or `amount`, so we'll improvise:
-  // Let's consider a transaction "credit" if closing_balance > opening_balance,
-  // and "debit" if the opposite.
+  const dimensions = getResponsiveDimensions();
   const openingBalance = Number(transaction.opening_balance);
   const closingBalance = Number(transaction.closing_balance);
-
   const isCredit = closingBalance >= openingBalance;
   const amount = Math.abs(closingBalance - openingBalance);
-
   const amountColor = isCredit ? "#10B981" : "#EF4444";
   const iconName = isCredit ? "arrow-down" : "arrow-up";
   const iconColor = amountColor;
@@ -52,29 +73,27 @@ const TransactionCard = ({ transaction }) => {
   };
 
   return (
-    <Animated.View style={[styles.card, { opacity }]}>
+    <Animated.View style={[styles.card, { opacity, marginHorizontal: dimensions.padding }]}>
       <View style={styles.cardHeader}>
         <View style={[styles.iconContainer, { backgroundColor: `${iconColor}20` }]}>
-          <FontAwesome name={iconName} size={16} color={iconColor} />
+          <FontAwesome name={iconName} size={isTablet ? 20 : 16} color={iconColor} />
         </View>
         <View style={styles.transactionInfo}>
           <Text
-            style={styles.transactionTitle}
+            style={[styles.transactionTitle, { fontSize: dimensions.cardFontSize }]}
             numberOfLines={1}
             ellipsizeMode="tail"
           >
-            {/* Use notes instead of description */}
-            {transaction.notes || "Transaction"}
+            {transaction.notes || transaction.description || "Transaction"}
           </Text>
           <Text style={styles.transactionDate}>
             {moment(transaction.date).format("MMM D, YYYY - h:mm A")}
           </Text>
         </View>
-        <Text style={[styles.amount, { color: amountColor }]}>
+        <Text style={[styles.amount, { color: amountColor, fontSize: dimensions.cardFontSize }]}>
           {isCredit ? "+" : "-"}${amount.toFixed(2)}
         </Text>
       </View>
-
       <View style={styles.cardFooter}>
         <View style={styles.balanceContainer}>
           <Text style={styles.balanceLabel}>Opening:</Text>
@@ -84,13 +103,67 @@ const TransactionCard = ({ transaction }) => {
           <Text style={styles.balanceLabel}>Closing:</Text>
           <Text style={styles.balanceValue}>${formatBalance(closingBalance)}</Text>
         </View>
+        {transaction.agent_name && (
+          <View style={styles.balanceContainer}>
+            <Text style={styles.balanceLabel}>Agent:</Text>
+            <Text style={styles.balanceValue}>{transaction.agent_name}</Text>
+          </View>
+        )}
       </View>
     </Animated.View>
   );
 };
 
+const AgentSelector = ({ visible, onClose, onSelectAgent, agents, loading }) => {
+  const dimensions = getResponsiveDimensions();
+  
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContent, { width: dimensions.screenWidth * 0.9, maxWidth: 500 }]}>
+          <View style={styles.modalHeader}>
+            <Text style={[styles.modalTitle, { fontSize: dimensions.headerFontSize - 4 }]}>Select Agent</Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <Ionicons name="close" size={24} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+          
+          {loading ? (
+            <View style={styles.modalLoading}>
+              <ActivityIndicator size="large" color="#3B82F6" />
+              <Text style={styles.loadingText}>Loading agents...</Text>
+            </View>
+          ) : (
+            <ScrollView style={styles.agentsList}>
+              {agents.map((agent) => (
+                <TouchableOpacity
+                  key={agent.id}
+                  style={styles.agentItem}
+                  onPress={() => onSelectAgent(agent)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.agentInfo}>
+                    <Text style={styles.agentName}>{agent.name}</Text>
+                    <Text style={styles.agentDetails}>ID: {agent.id}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+};
 
 const TransactionsScreen = ({ navigation }) => {
+  const dimensions = getResponsiveDimensions();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -98,11 +171,60 @@ const TransactionsScreen = ({ navigation }) => {
   const [employeeId, setEmployeeId] = useState(null);
   const [searchText, setSearchText] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState(null);
+  const [showAgentSelector, setShowAgentSelector] = useState(false);
+  const [agents, setAgents] = useState([]);
+  const [agentsLoading, setAgentsLoading] = useState(false);
+  const [screenData, setScreenData] = useState({
+    width: width,
+    height: height,
+  });
 
-  const fetchTransactions = async () => {
+  // Listen for orientation changes
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setScreenData({
+        width: window.width,
+        height: window.height,
+      });
+    });
+
+    return () => subscription?.remove();
+  }, []);
+
+  const fetchAgents = async () => {
+    try {
+      setAgentsLoading(true);
+      const userData = await getUserData();
+      if (!userData) throw new Error("User auth data not available");
+
+      const headers = {
+        "access-token": userData.userToken,
+        client: userData.client,
+        uid: userData.uid,
+      };
+
+      // Mock agents data - replace with actual API call
+      const mockAgents = [
+        { id: 1, name: "Agent Smith", department: "Sales" },
+        { id: 2, name: "Agent Johnson", department: "Support" },
+        { id: 3, name: "Agent Brown", department: "Marketing" },
+        { id: 4, name: "Agent Davis", department: "Operations" },
+      ];
+
+      setAgents(mockAgents);
+    } catch (err) {
+      console.error("Fetch agents error:", err);
+      Alert.alert("Error", "Failed to load agents");
+    } finally {
+      setAgentsLoading(false);
+    }
+  };
+
+  const fetchTransactions = async (agentId = null) => {
     try {
       setError(null);
-      setLoading(true);
+      if (!refreshing) setLoading(true);
 
       const userData = await getUserData();
       if (!userData) throw new Error("User auth data not available");
@@ -118,13 +240,23 @@ const TransactionsScreen = ({ navigation }) => {
         uid: userData.uid,
       };
 
-      const fetchedTransactions = await getTransactions(
-        fetchedEmployeeId,
-        headers
-      );
+      // Use agentId if provided, otherwise use employeeId
+      const targetId = agentId || fetchedEmployeeId;
+      const fetchedTransactions = await getTransactions(targetId, headers);
+      
       console.log("Transactions received:", fetchedTransactions);
+      
+      // Add agent information to transactions if fetching for specific agent
+      let processedTransactions = fetchedTransactions || [];
+      if (agentId && selectedAgent) {
+        processedTransactions = processedTransactions.map(txn => ({
+          ...txn,
+          agent_name: selectedAgent.name,
+          agent_id: agentId,
+        }));
+      }
 
-      setTransactions(fetchedTransactions || []);
+      setTransactions(processedTransactions);
     } catch (err) {
       console.error("Fetch error:", err);
       Alert.alert("Error", err.message || "Failed to load transactions");
@@ -138,37 +270,55 @@ const TransactionsScreen = ({ navigation }) => {
   useEffect(() => {
     console.log("[DEBUG] Component mounted");
     fetchTransactions();
+    fetchAgents();
   }, []);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchTransactions();
+    fetchTransactions(selectedAgent?.id);
+  }, [selectedAgent]);
+
+  const handleSelectAgent = useCallback((agent) => {
+    setSelectedAgent(agent);
+    setShowAgentSelector(false);
+    setTransactions([]); // Clear current transactions
+    fetchTransactions(agent.id);
+  }, []);
+
+  const handleClearAgentSelection = useCallback(() => {
+    setSelectedAgent(null);
+    setTransactions([]);
+    fetchTransactions(); // Fetch user's own transactions
   }, []);
 
   const filteredTransactions = useMemo(() => {
     if (!searchText.trim()) return transactions;
-    return transactions.filter((txn) =>
-      txn.description?.toLowerCase().includes(searchText.toLowerCase())
-    );
+    return transactions.filter((txn) => {
+      const searchLower = searchText.toLowerCase();
+      return (
+        txn.description?.toLowerCase().includes(searchLower) ||
+        txn.notes?.toLowerCase().includes(searchLower) ||
+        txn.agent_name?.toLowerCase().includes(searchLower)
+      );
+    });
   }, [searchText, transactions]);
 
-  const totalCredit = useMemo(
-    () =>
-      filteredTransactions.reduce(
-        (sum, txn) => (txn.type === "credit" ? sum + (txn.amount ?? 0) : sum),
-        0
-      ),
-    [filteredTransactions]
-  );
-
-  const totalDebit = useMemo(
-    () =>
-      filteredTransactions.reduce(
-        (sum, txn) => (txn.type === "debit" ? sum + (txn.amount ?? 0) : sum),
-        0
-      ),
-    [filteredTransactions]
-  );
+  // Calculate totals based on opening vs closing balance
+  const { totalCredit, totalDebit } = useMemo(() => {
+    return filteredTransactions.reduce((acc, txn) => {
+      const opening = Number(txn.opening_balance) || 0;
+      const closing = Number(txn.closing_balance) || 0;
+      const difference = closing - opening;
+      
+      if (difference > 0) {
+        acc.totalCredit += difference;
+      } else if (difference < 0) {
+        acc.totalDebit += Math.abs(difference);
+      }
+      
+      return acc;
+    }, { totalCredit: 0, totalDebit: 0 });
+  }, [filteredTransactions]);
 
   const netBalance = useMemo(
     () => totalCredit - totalDebit,
@@ -188,14 +338,14 @@ const TransactionsScreen = ({ navigation }) => {
     );
   }
 
-  if (error) {
+  if (error && !transactions.length) {
     return (
       <SafeAreaView style={styles.errorContainer}>
         <MaterialIcons name="error-outline" size={48} color="#EF4444" />
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity
           style={styles.retryButton}
-          onPress={fetchTransactions}
+          onPress={() => fetchTransactions(selectedAgent?.id)}
         >
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
@@ -205,9 +355,28 @@ const TransactionsScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Transaction History</Text>
+      <View style={[styles.header, { paddingHorizontal: dimensions.padding }]}>
+        <View style={styles.headerLeft}>
+          <Text style={[styles.headerTitle, { fontSize: dimensions.headerFontSize }]}>
+            Transaction History
+          </Text>
+          {selectedAgent && (
+            <View style={styles.agentBadge}>
+              <Text style={styles.agentBadgeText}>{selectedAgent.name}</Text>
+              <TouchableOpacity onPress={handleClearAgentSelection}>
+                <Ionicons name="close-circle" size={16} color="#EF4444" />
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
         <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setShowAgentSelector(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="people" size={24} color="#3B82F6" />
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.filterButton}
             onPress={onFilterPress}
@@ -218,7 +387,10 @@ const TransactionsScreen = ({ navigation }) => {
           <TouchableOpacity
             style={styles.addButton}
             onPress={() =>
-              navigation.navigate("CreateTransaction", { employeeId })
+              navigation.navigate("CreateTransaction", { 
+                employeeId: selectedAgent?.id || employeeId,
+                agentName: selectedAgent?.name 
+              })
             }
             activeOpacity={0.7}
           >
@@ -231,6 +403,7 @@ const TransactionsScreen = ({ navigation }) => {
         style={[
           styles.searchContainer,
           searchFocused && styles.searchContainerFocused,
+          { marginHorizontal: dimensions.padding }
         ]}
       >
         <MaterialIcons
@@ -264,13 +437,18 @@ const TransactionsScreen = ({ navigation }) => {
         <View style={styles.emptyContainer}>
           <Image
             source={require("../assets/no-transactions.png")}
-            style={styles.emptyImage}
+            style={[styles.emptyImage, { 
+              width: Math.min(180, screenData.width * 0.4),
+              height: Math.min(180, screenData.width * 0.4)
+            }]}
           />
           <Text style={styles.emptyTitle}>No Transactions Found</Text>
           <Text style={styles.emptySubtitle}>
             {searchText.trim()
               ? "No matches for your search. Try different keywords."
-              : "You don't have any transactions yet."}
+              : selectedAgent 
+                ? `No transactions found for ${selectedAgent.name}.`
+                : "You don't have any transactions yet."}
           </Text>
           <TouchableOpacity
             style={styles.refreshButton}
@@ -283,45 +461,61 @@ const TransactionsScreen = ({ navigation }) => {
         </View>
       ) : (
         <>
-          <View style={styles.summaryContainer}>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Total Transactions</Text>
-              <Text style={styles.summaryValue}>
-                {filteredTransactions.length}
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() =>
-                navigation.navigate("CreateTransaction", { employeeId })
-              }
-            >
-              <Ionicons name="add" size={24} color="#3B82F6" />
-            </TouchableOpacity>
-
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Net Balance</Text>
-              <Text
-                style={[
-                  styles.summaryValue,
-                  { color: netBalance >= 0 ? "#10B981" : "#EF4444" },
-                ]}
-              >
-                {netBalance >= 0 ? "+" : "-"}${Math.abs(netBalance).toFixed(2)}
-              </Text>
-            </View>
+          <View style={[styles.summaryContainer, { paddingHorizontal: dimensions.padding }]}>
+            {isLargeScreen ? (
+              <>
+                <View style={[styles.summaryCard, { width: dimensions.summaryCardWidth }]}>
+                  <Text style={styles.summaryTitle}>Total Transactions</Text>
+                  <Text style={styles.summaryValue}>{filteredTransactions.length}</Text>
+                </View>
+                <View style={[styles.summaryCard, { width: dimensions.summaryCardWidth }]}>
+                  <Text style={styles.summaryTitle}>Total Credit</Text>
+                  <Text style={[styles.summaryValue, { color: "#10B981" }]}>
+                    +${totalCredit.toFixed(2)}
+                  </Text>
+                </View>
+                <View style={[styles.summaryCard, { width: dimensions.summaryCardWidth }]}>
+                  <Text style={styles.summaryTitle}>Net Balance</Text>
+                  <Text
+                    style={[
+                      styles.summaryValue,
+                      { color: netBalance >= 0 ? "#10B981" : "#EF4444" },
+                    ]}
+                  >
+                    {netBalance >= 0 ? "+" : "-"}${Math.abs(netBalance).toFixed(2)}
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={[styles.summaryCard, { width: dimensions.summaryCardWidth }]}>
+                  <Text style={styles.summaryTitle}>Total Transactions</Text>
+                  <Text style={styles.summaryValue}>{filteredTransactions.length}</Text>
+                </View>
+                <View style={[styles.summaryCard, { width: dimensions.summaryCardWidth }]}>
+                  <Text style={styles.summaryTitle}>Net Balance</Text>
+                  <Text
+                    style={[
+                      styles.summaryValue,
+                      { color: netBalance >= 0 ? "#10B981" : "#EF4444" },
+                    ]}
+                  >
+                    {netBalance >= 0 ? "+" : "-"}${Math.abs(netBalance).toFixed(2)}
+                  </Text>
+                </View>
+              </>
+            )}
           </View>
 
-          <View style={styles.totalsRow}>
-            <View style={[styles.totalBox, styles.creditBox]}>
+          <View style={[styles.totalsRow, { paddingHorizontal: dimensions.padding }]}>
+            <View style={[styles.totalBox, styles.creditBox, { width: dimensions.totalBoxWidth }]}>
               <Ionicons name="trending-up" size={20} color="#10B981" />
               <Text style={styles.totalLabel}>Total Credit</Text>
               <Text style={[styles.totalValue, { color: "#10B981" }]}>
                 +${totalCredit.toFixed(2)}
               </Text>
             </View>
-            <View style={[styles.totalBox, styles.debitBox]}>
+            <View style={[styles.totalBox, styles.debitBox, { width: dimensions.totalBoxWidth }]}>
               <Ionicons name="trending-down" size={20} color="#EF4444" />
               <Text style={styles.totalLabel}>Total Debit</Text>
               <Text style={[styles.totalValue, { color: "#EF4444" }]}>
@@ -351,6 +545,14 @@ const TransactionsScreen = ({ navigation }) => {
           />
         </>
       )}
+
+      <AgentSelector
+        visible={showAgentSelector}
+        onClose={() => setShowAgentSelector(false)}
+        onSelectAgent={handleSelectAgent}
+        agents={agents}
+        loading={agentsLoading}
+      />
     </SafeAreaView>
   );
 };
@@ -369,8 +571,37 @@ const styles = StyleSheet.create({
     padding: 8,
     marginLeft: 8,
   },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    paddingVertical: 16,
+  },
+  headerLeft: {
+    flex: 1,
+  },
   headerButtons: {
     flexDirection: "row",
+  },
+  headerTitle: {
+    fontWeight: "700",
+    color: "#1E293B",
+    marginBottom: 8,
+  },
+  agentBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    alignSelf: "flex-start",
+  },
+  agentBadgeText: {
+    fontSize: 12,
+    color: "#3B82F6",
+    fontWeight: "600",
+    marginRight: 6,
   },
   loadingText: {
     marginTop: 16,
@@ -400,24 +631,12 @@ const styles = StyleSheet.create({
     color: "white",
     fontWeight: "600",
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#1E293B",
-  },
   filterButton: {
     padding: 8,
   },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 16,
     marginBottom: 12,
     backgroundColor: "#F1F5F9",
     borderRadius: 12,
@@ -449,7 +668,6 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderRadius: 12,
     padding: 16,
-    marginHorizontal: 16,
     marginBottom: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -474,7 +692,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   transactionTitle: {
-    fontSize: 16,
     fontWeight: "600",
     color: "#1E293B",
     marginBottom: 4,
@@ -484,7 +701,6 @@ const styles = StyleSheet.create({
     color: "#64748B",
   },
   amount: {
-    fontSize: 16,
     fontWeight: "700",
   },
   cardFooter: {
@@ -493,10 +709,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#F1F5F9",
     paddingTop: 12,
+    flexWrap: "wrap",
   },
   balanceContainer: {
     flexDirection: "row",
     alignItems: "center",
+    minWidth: "30%",
   },
   balanceLabel: {
     fontSize: 12,
@@ -511,19 +729,19 @@ const styles = StyleSheet.create({
   summaryContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
     marginBottom: 12,
+    flexWrap: "wrap",
   },
   summaryCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
     padding: 16,
-    width: "48%",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+    marginBottom: 8,
   },
   summaryTitle: {
     fontSize: 14,
@@ -538,19 +756,19 @@ const styles = StyleSheet.create({
   totalsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
     marginBottom: 12,
+    flexWrap: "wrap",
   },
   totalBox: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
     padding: 16,
-    width: "48%",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+    marginBottom: 8,
   },
   creditBox: {
     borderLeftWidth: 4,
@@ -577,8 +795,6 @@ const styles = StyleSheet.create({
     padding: 40,
   },
   emptyImage: {
-    width: 180,
-    height: 180,
     marginBottom: 24,
     opacity: 0.7,
   },
@@ -607,6 +823,66 @@ const styles = StyleSheet.create({
     color: "#3B82F6",
     fontWeight: "600",
     marginLeft: 8,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    maxHeight: height * 0.7,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+  },
+  modalTitle: {
+    fontWeight: "700",
+    color: "#1E293B",
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalLoading: {
+    padding: 40,
+    alignItems: "center",
+  },
+  agentsList: {
+    maxHeight: height * 0.5,
+  },
+  agentItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+  },
+  agentInfo: {
+    flex: 1,
+  },
+  agentName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1E293B",
+    marginBottom: 4,
+  },
+  agentDetails: {
+    fontSize: 14,
+    color: "#64748B",
   },
 });
 
