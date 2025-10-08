@@ -33,50 +33,41 @@ const LoginScreen = ({ navigation }) => {
   const handleLogin = async () => {
     try {
       setLoading(true);
-      const { accessToken, client, uid, user } = await login(email, password);
-
-      if (!accessToken || !client || !uid) {
-        throw new Error("Missing authentication headers");
-      }
-
+  
+      const { accessToken, client, uid } = await login(email, password);
+  
       const validateResponse = await axios.get(
         "http://192.168.1.200:3001/auth/validate_token",
         {
-          headers: {
-            "access-token": accessToken,
-            client,
-            uid,
-          },
+          headers: { "access-token": accessToken, client, uid },
         }
       );
-
+  
       const validatedUser = validateResponse.data.data;
-      if (!validatedUser) {
-        throw new Error("Failed to retrieve user from token validation");
-      }
-
+  
       await storeUserData({
         user: validatedUser,
         accessToken,
         client,
         uid,
       });
-
+  
       setAuthUser({
         user: validatedUser,
         accessToken,
         client,
         uid,
       });
-
-      navigation.navigate("Dashboard");
+  
+      // ✅ no manual navigation needed
     } catch (error) {
-      console.error("Login error:", error);
       Alert.alert("Login Failed", error.message || "An error occurred");
     } finally {
       setLoading(false);
     }
   };
+  
+  
 
   return (
     <View style={styles.container}>
