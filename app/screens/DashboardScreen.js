@@ -562,82 +562,56 @@ const AgentComparisonChart = ({ agents, formatCurrency }) => {
     return null;
   }
 
-  const sortedAgents = [...agents].sort((a, b) => {
-    const balanceA = parseFloat(a.latest_balance || a.closing_balance) || 0;
-    const balanceB = parseFloat(b.latest_balance || b.closing_balance) || 0;
-    return balanceB - balanceA;
-  });
+  // Simple direct approach - just like how metrics.totalBalance works
+  const agentsWithBalance = agents.map((agent) => ({
+    ...agent,
+    displayBalance: parseFloat(
+      agent.latest_balance || agent.closing_balance || 0
+    ),
+  }));
 
-  const topAgents = sortedAgents.slice(0, 5);
+  const sortedAgents = agentsWithBalance
+    .filter((a) => a.displayBalance > 0)
+    .sort((a, b) => b.displayBalance - a.displayBalance)
+    .slice(0, 5);
+
+  if (sortedAgents.length === 0) {
+    return null;
+  }
+
+  const maxBalance = sortedAgents[0].displayBalance;
 
   return (
     <View style={styles.agentComparisonContainer}>
       <Text style={styles.modernChartTitle}>Top Performing Agents</Text>
-      {topAgents.map((agent, index) => {
-        const balance =
-          parseFloat(agent.latest_balance || agent.closing_balance) || 0;
-        const maxBalance = Math.max(
-          ...topAgents.map(
-            (a) => parseFloat(a.latest_balance || a.closing_balance) || 0
-          )
-        );
-        const percentage = maxBalance > 0 ? (balance / maxBalance) * 100 : 0;
 
-        const rankColors = [
-          "#FFD700",
-          "#C0C0C0",
-          "#CD7F32",
-          theme.colors.primary[500],
-          theme.colors.primary[400],
-        ];
+      {sortedAgents.map((agent, index) => {
+        const percentage = (agent.displayBalance / maxBalance) * 100;
 
         return (
-          <View key={agent.id} style={styles.agentComparisonItem}>
-            <View style={styles.agentRankContainer}>
-              <View
-                style={[
-                  styles.agentRank,
-                  {
-                    backgroundColor: rankColors[index],
-                    ...theme.shadows.small,
-                  },
-                ]}
-              >
-                <Text style={styles.agentRankText}>{index + 1}</Text>
-              </View>
-              <View style={styles.agentInfo}>
-                <Text style={styles.agentComparisonName} numberOfLines={1}>
-                  {agent.name}
-                </Text>
-                <Text style={styles.agentComparisonBalance} numberOfLines={1}>
-                  {formatCurrency(balance)}
-                </Text>
-              </View>
+          <View key={agent.id || index} style={styles.topAgentItem}>
+            {/* Rank */}
+            <View style={styles.topAgentRank}>
+              <Text style={styles.topAgentRankText}>{index + 1}</Text>
             </View>
-            <View style={styles.agentPerformanceBarContainer}>
-              <View style={styles.agentPerformanceBarTrack}>
+
+            {/* Name */}
+            <View style={styles.topAgentInfo}>
+              <Text style={styles.topAgentName} numberOfLines={1}>
+                {agent.name}
+              </Text>
+              <View style={styles.topAgentBar}>
                 <View
-                  style={[
-                    styles.agentPerformanceBarFill,
-                    {
-                      width: `${percentage}%`,
-                      backgroundColor:
-                        index === 0
-                          ? theme.colors.secondary[500]
-                          : index === 1
-                          ? theme.colors.primary[500]
-                          : theme.colors.accent.violet,
-                    },
-                  ]}
+                  style={[styles.topAgentBarFill, { width: `${percentage}%` }]}
                 />
               </View>
-              <AgentPerformanceRing
-                agent={{
-                  opening_balance: parseFloat(agent.opening_balance) || 0,
-                  closing_balance: balance,
-                }}
-                size={36}
-              />
+            </View>
+
+            {/* Balance */}
+            <View style={styles.topAgentBalanceBox}>
+              <Text style={styles.topAgentBalance}>
+                {formatCurrency(agent.displayBalance)}
+              </Text>
             </View>
           </View>
         );
@@ -645,7 +619,6 @@ const AgentComparisonChart = ({ agents, formatCurrency }) => {
     </View>
   );
 };
-
 // Enhanced Progress Ring
 const EnhancedProgressRing = ({
   progress,
@@ -1884,10 +1857,16 @@ const DashboardScreen = () => {
               </View>
 
               {/* Only show if we have agents with balance data */}
-              {myAgents.length > 0 && (
+              {/* Top Performing Agents - Use agentsSummary.agents for latest_balance */}
+              {(dashboardData.agentsSummary.agents.length > 0 ||
+                myAgents.length > 0) && (
                 <View style={styles.modernCard}>
                   <AgentComparisonChart
-                    agents={myAgents}
+                    agents={
+                      dashboardData.agentsSummary.agents.length > 0
+                        ? dashboardData.agentsSummary.agents
+                        : myAgents
+                    }
                     formatCurrency={formatCurrency}
                   />
                 </View>
@@ -2626,9 +2605,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: theme.colors.background.secondary,
+    paddingHorizontal: theme.spacing.xl,
   },
   loadingText: {
-    marginTop: theme.spacing.lg,
+    marginTop: theme.spacing.xl,
     ...theme.typography.body,
     color: theme.colors.text.primary,
     fontWeight: "600",
@@ -2637,7 +2617,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: theme.spacing.lg,
+    padding: screenWidth < 768 ? theme.spacing.lg : theme.spacing.xl,
   },
   bottomSpacing: {
     height: theme.spacing.xxxl * 2,
@@ -2648,7 +2628,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: theme.spacing.xl,
+    paddingHorizontal: screenWidth < 768 ? theme.spacing.lg : theme.spacing.xl,
     paddingVertical: theme.spacing.lg,
     backgroundColor: theme.colors.primary[600],
     ...theme.shadows.large,
@@ -2657,19 +2637,27 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     borderRadius: theme.borderRadius.md,
     backgroundColor: "rgba(255, 255, 255, 0.15)",
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
   modernHeaderCenter: {
     flex: 1,
     alignItems: "center",
+    paddingHorizontal: theme.spacing.md,
   },
   modernHeaderTitle: {
-    ...theme.typography.h2,
+    fontSize: screenWidth < 768 ? 18 : 20,
+    fontWeight: "700",
     color: theme.colors.text.inverse,
     marginBottom: theme.spacing.xs,
   },
   modernHeaderSubtitleContainer: {
     flexDirection: "row",
     alignItems: "center",
+    flexWrap: "wrap",
+    justifyContent: "center",
   },
   agentCountBadge: {
     flexDirection: "row",
@@ -2680,7 +2668,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.full,
   },
   modernHeaderSubtitle: {
-    ...theme.typography.captionMedium,
+    fontSize: screenWidth < 768 ? 11 : 12,
+    fontWeight: "500",
     color: theme.colors.text.inverse,
     marginLeft: theme.spacing.xs,
   },
@@ -2688,6 +2677,10 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     borderRadius: theme.borderRadius.md,
     backgroundColor: "rgba(255, 255, 255, 0.15)",
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   // ==================== SIDEBAR MENU STYLES ====================
@@ -2701,15 +2694,16 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.6)",
   },
   modernMenu: {
-    width: "85%",
+    width: screenWidth < 768 ? "85%" : "320px",
+    maxWidth: 400,
     height: "100%",
     backgroundColor: theme.colors.surface.primary,
     ...theme.shadows.large,
   },
   modernMenuHeader: {
     paddingTop: 50,
-    paddingHorizontal: theme.spacing.xxl,
-    paddingBottom: theme.spacing.xxl,
+    paddingHorizontal: theme.spacing.xl,
+    paddingBottom: theme.spacing.xl,
     backgroundColor: theme.colors.primary[600],
   },
   menuProfileSection: {
@@ -2725,10 +2719,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: theme.spacing.lg,
-    ...theme.shadows.colored(theme.colors.primary[500]),
+    ...theme.shadows.medium,
   },
   profileAvatarText: {
-    ...theme.typography.h3,
+    fontSize: 20,
     color: theme.colors.text.inverse,
     fontWeight: "800",
   },
@@ -2736,12 +2730,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   profileName: {
-    ...theme.typography.h3,
+    fontSize: 18,
+    fontWeight: "700",
     color: theme.colors.text.inverse,
     marginBottom: theme.spacing.xs,
   },
   profileRole: {
-    ...theme.typography.captionMedium,
+    fontSize: 12,
+    fontWeight: "500",
     color: "rgba(255, 255, 255, 0.8)",
     marginBottom: theme.spacing.sm,
   },
@@ -2757,14 +2753,14 @@ const styles = StyleSheet.create({
     marginRight: theme.spacing.sm,
   },
   profileStatus: {
-    ...theme.typography.caption,
+    fontSize: 11,
     color: theme.colors.secondary[500],
     fontWeight: "600",
   },
   modernCloseButton: {
     position: "absolute",
     top: 50,
-    right: theme.spacing.xl,
+    right: theme.spacing.lg,
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -2776,23 +2772,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   menuItemsContainer: {
-    paddingTop: theme.spacing.xxl,
+    paddingTop: theme.spacing.xl,
   },
   menuSectionTitle: {
-    ...theme.typography.label,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1,
     color: theme.colors.text.tertiary,
-    paddingHorizontal: theme.spacing.xxl,
+    paddingHorizontal: theme.spacing.xl,
     marginBottom: theme.spacing.lg,
+    textTransform: "uppercase",
   },
   modernMenuItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: theme.spacing.xxl,
+    paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.lg,
     marginHorizontal: theme.spacing.md,
     marginVertical: theme.spacing.xs,
     borderRadius: theme.borderRadius.lg,
     backgroundColor: "transparent",
+    minHeight: 56,
   },
   modernMenuItemActive: {
     backgroundColor: theme.colors.primary[50],
@@ -2811,32 +2811,36 @@ const styles = StyleSheet.create({
     marginRight: theme.spacing.lg,
   },
   modernMenuItemText: {
-    ...theme.typography.bodyMedium,
+    fontSize: 15,
+    fontWeight: "600",
     color: theme.colors.text.primary,
     flex: 1,
-    fontWeight: "600",
   },
   modernMenuItemTextActive: {
     color: theme.colors.primary[600],
+    fontWeight: "700",
   },
   menuItemBadge: {
     backgroundColor: theme.colors.error,
     borderRadius: theme.borderRadius.full,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 4,
     marginRight: theme.spacing.md,
     minWidth: 24,
+    minHeight: 24,
     alignItems: "center",
+    justifyContent: "center",
   },
   menuItemBadgeText: {
-    ...theme.typography.caption,
+    fontSize: 11,
     color: theme.colors.text.inverse,
     fontWeight: "700",
   },
   menuStatsSection: {
-    paddingHorizontal: theme.spacing.xxl,
+    paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.xxl,
     backgroundColor: theme.colors.background.tertiary,
+    marginTop: theme.spacing.lg,
   },
   menuStatItem: {
     flexDirection: "row",
@@ -2856,30 +2860,34 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   menuStatLabel: {
-    ...theme.typography.captionMedium,
+    fontSize: 12,
+    fontWeight: "500",
     color: theme.colors.text.secondary,
-    marginBottom: theme.spacing.xs,
+    marginBottom: 4,
   },
   menuStatValue: {
-    ...theme.typography.bodyMedium,
+    fontSize: 15,
     color: theme.colors.text.primary,
     fontWeight: "700",
   },
   menuFooter: {
-    paddingHorizontal: theme.spacing.xxl,
+    paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.xl,
     borderTopWidth: 1,
     borderTopColor: theme.colors.neutral[200],
+    marginTop: "auto",
   },
   menuFooterItem: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: theme.spacing.md,
+    minHeight: 48,
   },
   menuFooterText: {
-    ...theme.typography.bodyMedium,
+    fontSize: 15,
     color: theme.colors.text.secondary,
     marginLeft: theme.spacing.md,
+    fontWeight: "500",
   },
   logoutMenuItem: {
     flexDirection: "row",
@@ -2889,9 +2897,10 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.lg,
     borderTopWidth: 1,
     borderTopColor: theme.colors.neutral[100],
+    minHeight: 48,
   },
   logoutMenuText: {
-    ...theme.typography.bodyMedium,
+    fontSize: 15,
     color: theme.colors.error,
     fontWeight: "600",
     marginLeft: theme.spacing.md,
@@ -2899,7 +2908,7 @@ const styles = StyleSheet.create({
   menuBackdrop: {
     position: "absolute",
     top: 0,
-    left: "85%",
+    left: screenWidth < 768 ? "85%" : "320px",
     right: 0,
     bottom: 0,
   },
@@ -2914,42 +2923,45 @@ const styles = StyleSheet.create({
   },
   modernTab: {
     flex: 1,
-    flexDirection: "row",
+    flexDirection: screenWidth < 768 ? "column" : "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.sm,
-    position: "relative",
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.xs,
+    minHeight: 56,
   },
   modernActiveTab: {
     borderBottomWidth: 3,
     borderBottomColor: theme.colors.primary[500],
   },
   modernTabText: {
-    ...theme.typography.captionMedium,
-    color: theme.colors.text.secondary,
-    marginLeft: theme.spacing.sm,
+    fontSize: screenWidth < 768 ? 10 : 12,
     fontWeight: "600",
+    color: theme.colors.text.secondary,
+    marginLeft: screenWidth < 768 ? 0 : theme.spacing.sm,
+    marginTop: screenWidth < 768 ? 4 : 0,
+    textAlign: "center",
   },
   modernActiveTabText: {
     color: theme.colors.primary[500],
+    fontWeight: "700",
   },
 
   // ==================== CARD STYLES ====================
   modernCard: {
     backgroundColor: theme.colors.surface.primary,
-    borderRadius: theme.borderRadius.xxl,
-    padding: theme.spacing.xxxl,
+    borderRadius: theme.borderRadius.xl,
+    padding: screenWidth < 768 ? theme.spacing.lg : theme.spacing.xxl,
     marginBottom: theme.spacing.xl,
     ...theme.shadows.medium,
     borderWidth: 1,
     borderColor: theme.colors.neutral[100],
   },
   modernCardTitle: {
-    ...theme.typography.h2,
-    color: theme.colors.text.primary,
-    marginBottom: theme.spacing.xl,
+    fontSize: screenWidth < 768 ? 18 : 20,
     fontWeight: "800",
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.lg,
   },
   elevatedCard: {
     ...theme.shadows.large,
@@ -2973,18 +2985,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.lg,
+    flexWrap: "wrap",
   },
   viewAllText: {
-    ...theme.typography.bodyMedium,
+    fontSize: 14,
     color: theme.colors.primary[500],
     fontWeight: "600",
   },
 
   // ==================== STATUS CARD STYLES ====================
   modernStatusCard: {
-    borderRadius: theme.borderRadius.xxl,
-    padding: theme.spacing.xxl,
+    borderRadius: theme.borderRadius.xl,
+    padding: screenWidth < 768 ? theme.spacing.lg : theme.spacing.xxl,
     marginBottom: theme.spacing.lg,
     overflow: "hidden",
     position: "relative",
@@ -3009,7 +3022,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.lg,
   },
   statusDateBadge: {
     flexDirection: "row",
@@ -3021,15 +3034,16 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.sm,
   },
   modernStatusDate: {
-    ...theme.typography.bodyMedium,
-    color: theme.colors.text.inverse,
+    fontSize: screenWidth < 768 ? 12 : 14,
     fontWeight: "700",
+    color: theme.colors.text.inverse,
     marginLeft: theme.spacing.sm,
   },
   modernStatusUpdate: {
-    ...theme.typography.caption,
+    fontSize: 11,
     color: "rgba(255, 255, 255, 0.8)",
     marginTop: theme.spacing.xs,
+    fontWeight: "500",
   },
   modernStatusIcon: {
     padding: theme.spacing.sm,
@@ -3047,23 +3061,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statusMetricValue: {
-    ...theme.typography.h3,
-    color: theme.colors.text.inverse,
+    fontSize: screenWidth < 768 ? 16 : 18,
     fontWeight: "800",
+    color: theme.colors.text.inverse,
     marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.xs,
   },
   statusMetricLabel: {
-    ...theme.typography.caption,
+    fontSize: 11,
     color: "rgba(255, 255, 255, 0.8)",
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    textAlign: "center",
   },
   statusMetricDivider: {
     width: 1,
     height: 40,
     backgroundColor: "rgba(255, 255, 255, 0.2)",
+    marginHorizontal: theme.spacing.md,
   },
 
   // ==================== METRIC CARD STYLES ====================
@@ -3074,12 +3090,12 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   modernMetricCard: {
-    width: "48%",
+    width: screenWidth < 768 ? "48%" : "48%",
     borderRadius: theme.borderRadius.xl,
     marginBottom: theme.spacing.md,
     overflow: "hidden",
     position: "relative",
-    minHeight: 140,
+    minHeight: screenWidth < 768 ? 130 : 140,
     ...theme.shadows.large,
   },
   metricGradientBackground: {
@@ -3098,19 +3114,19 @@ const styles = StyleSheet.create({
     opacity: 0.3,
   },
   metricContent: {
-    padding: theme.spacing.xl,
-    paddingVertical: theme.spacing.xxl,
+    padding: screenWidth < 768 ? theme.spacing.lg : theme.spacing.xl,
+    paddingVertical: theme.spacing.xl,
   },
   metricHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
   },
   metricIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "rgba(255, 255, 255, 0.25)",
     justifyContent: "center",
     alignItems: "center",
@@ -3119,39 +3135,40 @@ const styles = StyleSheet.create({
   trendBadge: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
     borderRadius: theme.borderRadius.full,
     ...theme.shadows.small,
   },
   trendText: {
-    ...theme.typography.caption,
+    fontSize: 10,
     color: theme.colors.text.inverse,
     fontWeight: "700",
-    marginLeft: theme.spacing.xs,
+    marginLeft: 4,
   },
   metricValue: {
-    ...theme.typography.h2,
+    fontSize: screenWidth < 768 ? 16 : 18,
     color: theme.colors.text.inverse,
     fontWeight: "800",
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
     textShadowColor: "rgba(0, 0, 0, 0.1)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
   metricLabel: {
-    ...theme.typography.captionMedium,
+    fontSize: 11,
     color: "rgba(255, 255, 255, 0.95)",
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    lineHeight: 14,
   },
 
   // ==================== BALANCE OVERVIEW STYLES ====================
   balancePrimarySection: {
     backgroundColor: theme.colors.primary[50],
     borderRadius: theme.borderRadius.xl,
-    padding: theme.spacing.xxxl,
+    padding: screenWidth < 768 ? theme.spacing.lg : theme.spacing.xxl,
     marginBottom: theme.spacing.xl,
     borderWidth: 2,
     borderColor: theme.colors.primary[200],
@@ -3161,7 +3178,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.lg,
+    flexWrap: "wrap",
   },
   cumulativeIconContainer: {
     width: 48,
@@ -3174,17 +3192,18 @@ const styles = StyleSheet.create({
     ...theme.shadows.small,
   },
   cumulativeBalanceTitle: {
-    fontSize: 13,
+    fontSize: screenWidth < 768 ? 11 : 13,
     color: theme.colors.text.primary,
     fontWeight: "800",
     letterSpacing: 1,
     textTransform: "uppercase",
+    textAlign: "center",
   },
   cumulativeBalanceValue: {
-    fontSize: 44,
+    fontSize: screenWidth < 768 ? 32 : 44,
     color: theme.colors.primary[600],
     textAlign: "center",
-    marginVertical: theme.spacing.xl,
+    marginVertical: theme.spacing.lg,
     fontWeight: "900",
     letterSpacing: -1.5,
     textShadowColor: "rgba(124, 58, 237, 0.1)",
@@ -3195,25 +3214,29 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginTop: theme.spacing.xl,
-    paddingTop: theme.spacing.xl,
+    marginTop: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
     borderTopWidth: 2,
     borderTopColor: theme.colors.primary[200],
+    flexWrap: "wrap",
   },
   cumulativeStat: {
     alignItems: "center",
-    paddingHorizontal: theme.spacing.xxl,
+    paddingHorizontal: theme.spacing.lg,
+    minWidth: screenWidth < 768 ? "45%" : "auto",
+    marginVertical: theme.spacing.xs,
   },
   cumulativeStatLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: theme.colors.text.secondary,
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    textAlign: "center",
   },
   cumulativeStatValue: {
-    fontSize: 18,
+    fontSize: 16,
     color: theme.colors.text.primary,
     fontWeight: "800",
   },
@@ -3222,23 +3245,26 @@ const styles = StyleSheet.create({
     height: 40,
     backgroundColor: theme.colors.primary[200],
     borderRadius: 1,
+    marginHorizontal: theme.spacing.md,
+    display: screenWidth < 768 ? "none" : "flex",
   },
   balanceSection: {
     backgroundColor: theme.colors.background.tertiary,
     borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.xl,
+    padding: theme.spacing.lg,
     marginBottom: theme.spacing.lg,
   },
   balanceSectionTitle: {
-    ...theme.typography.bodyMedium,
-    color: theme.colors.text.primary,
+    fontSize: 15,
     fontWeight: "700",
+    color: theme.colors.text.primary,
   },
   todayActivityHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: theme.spacing.lg,
+    flexWrap: "wrap",
   },
   hasTransactionBadge: {
     flexDirection: "row",
@@ -3264,20 +3290,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   balanceLabel: {
-    ...theme.typography.captionMedium,
+    fontSize: 11,
+    fontWeight: "600",
     color: theme.colors.text.secondary,
     marginBottom: theme.spacing.sm,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    fontWeight: "600",
   },
   balanceValue: {
-    ...theme.typography.h3,
+    fontSize: screenWidth < 768 ? 16 : 18,
     color: theme.colors.text.primary,
     fontWeight: "800",
   },
   netChangeContainer: {
-    paddingTop: theme.spacing.xl,
+    paddingTop: theme.spacing.lg,
     borderTopWidth: 1,
     borderTopColor: theme.colors.neutral[200],
   },
@@ -3285,16 +3311,83 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   netChangeLabel: {
-    ...theme.typography.captionMedium,
+    fontSize: 11,
+    fontWeight: "600",
     color: theme.colors.text.secondary,
     marginBottom: theme.spacing.sm,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    fontWeight: "600",
   },
   netChangeValue: {
-    ...theme.typography.h2,
+    fontSize: screenWidth < 768 ? 18 : 20,
     fontWeight: "900",
+  },
+
+  // ==================== TOP AGENT STYLES (NEW SIMPLIFIED DESIGN) ====================
+  agentComparisonContainer: {
+    marginBottom: theme.spacing.lg,
+  },
+  topAgentItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: theme.spacing.lg,
+    paddingHorizontal: screenWidth < 768 ? theme.spacing.md : theme.spacing.lg,
+    backgroundColor: theme.colors.surface.primary,
+    borderRadius: theme.borderRadius.lg,
+    marginBottom: theme.spacing.md,
+    borderLeftWidth: 4,
+    borderLeftColor: theme.colors.primary[500],
+    ...theme.shadows.small,
+  },
+  topAgentRank: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.colors.primary[500],
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: theme.spacing.md,
+    ...theme.shadows.small,
+  },
+  topAgentRankText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: theme.colors.text.inverse,
+  },
+  topAgentInfo: {
+    flex: 1,
+    marginRight: theme.spacing.md,
+  },
+  topAgentName: {
+    fontSize: screenWidth < 768 ? 14 : 15,
+    fontWeight: "700",
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.sm,
+  },
+  topAgentBar: {
+    height: 6,
+    backgroundColor: theme.colors.neutral[200],
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  topAgentBarFill: {
+    height: "100%",
+    backgroundColor: theme.colors.primary[500],
+    borderRadius: 3,
+  },
+  topAgentBalanceBox: {
+    backgroundColor: theme.colors.background.tertiary,
+    paddingHorizontal: screenWidth < 768 ? theme.spacing.sm : theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.md,
+    minWidth: screenWidth < 768 ? 100 : 120,
+    alignItems: "flex-end",
+  },
+  topAgentBalance: {
+    fontSize: screenWidth < 768 ? 13 : 15,
+    fontWeight: "800",
+    color: theme.colors.text.primary,
+    textAlign: "right",
   },
 
   // ==================== CHART STYLES ====================
@@ -3305,13 +3398,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: theme.spacing.xl,
-    paddingHorizontal: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
+    flexWrap: "wrap",
   },
   modernChartTitle: {
-    ...theme.typography.h3,
-    color: theme.colors.text.primary,
+    fontSize: screenWidth < 768 ? 18 : 20,
     fontWeight: "800",
+    color: theme.colors.text.primary,
+    marginBottom: screenWidth < 768 ? theme.spacing.sm : 0,
   },
   chartLegend: {
     flexDirection: "row",
@@ -3324,7 +3418,7 @@ const styles = StyleSheet.create({
     marginRight: theme.spacing.sm,
   },
   chartLegendText: {
-    ...theme.typography.caption,
+    fontSize: 12,
     color: theme.colors.text.secondary,
     fontWeight: "600",
   },
@@ -3332,20 +3426,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "flex-end",
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
   },
   modernBarContainer: {
     flex: 1,
     alignItems: "center",
-    marginHorizontal: theme.spacing.xs,
+    marginHorizontal: 4,
+    minWidth: 40,
   },
   modernBarValueTop: {
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
     minHeight: 32,
     justifyContent: "center",
   },
   modernBarValueTopText: {
-    ...theme.typography.caption,
+    fontSize: screenWidth < 768 ? 10 : 11,
     fontWeight: "800",
     textAlign: "center",
   },
@@ -3357,10 +3452,9 @@ const styles = StyleSheet.create({
   modernBar: {
     width: "100%",
     minHeight: 8,
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.borderRadius.sm,
     ...theme.shadows.small,
     overflow: "hidden",
-    position: "relative",
   },
   barGlowEffect: {
     position: "absolute",
@@ -3369,14 +3463,12 @@ const styles = StyleSheet.create({
     right: 0,
     height: "30%",
     backgroundColor: "rgba(255, 255, 255, 0.3)",
-    borderTopLeftRadius: theme.borderRadius.lg,
-    borderTopRightRadius: theme.borderRadius.lg,
   },
   modernBarLabel: {
-    ...theme.typography.captionMedium,
+    fontSize: screenWidth < 768 ? 10 : 12,
+    fontWeight: "800",
     color: theme.colors.text.primary,
     textAlign: "center",
-    fontWeight: "800",
     marginTop: theme.spacing.sm,
   },
 
@@ -3385,17 +3477,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   donutTitle: {
-    ...theme.typography.h3,
-    color: theme.colors.text.primary,
-    marginBottom: theme.spacing.xxl,
-    textAlign: "center",
+    fontSize: screenWidth < 768 ? 16 : 18,
     fontWeight: "800",
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.xl,
+    textAlign: "center",
   },
   donutChart: {
     position: "relative",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: theme.spacing.xxl,
+    marginBottom: theme.spacing.xl,
   },
   donutSegment: {
     position: "absolute",
@@ -3409,24 +3501,24 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   donutCenterValue: {
-    ...theme.typography.h1,
+    fontSize: screenWidth < 768 ? 20 : 24,
     color: theme.colors.text.primary,
     fontWeight: "900",
   },
   donutCenterLabel: {
-    ...theme.typography.captionMedium,
+    fontSize: 12,
+    fontWeight: "600",
     color: theme.colors.text.secondary,
     marginTop: theme.spacing.xs,
-    fontWeight: "600",
   },
   donutLegends: {
     width: "100%",
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.sm,
   },
   legendItem: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
     backgroundColor: theme.colors.background.tertiary,
@@ -3437,95 +3529,30 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    marginRight: theme.spacing.lg,
+    marginRight: theme.spacing.md,
     ...theme.shadows.small,
   },
   legendText: {
     flex: 1,
-    ...theme.typography.bodyMedium,
-    color: theme.colors.text.primary,
+    fontSize: 14,
     fontWeight: "700",
+    color: theme.colors.text.primary,
   },
   legendValueContainer: {
     flexDirection: "row",
     alignItems: "center",
   },
   legendValue: {
-    ...theme.typography.bodyMedium,
+    fontSize: 14,
     color: theme.colors.text.primary,
     fontWeight: "900",
     marginRight: theme.spacing.xs,
   },
   legendPercent: {
-    ...theme.typography.captionMedium,
+    fontSize: 12,
     color: theme.colors.text.secondary,
     fontWeight: "600",
   },
-
-  // ==================== AGENT COMPARISON STYLES ====================
-  agentComparisonContainer: {
-    marginBottom: theme.spacing.lg,
-  },
-  agentComparisonItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: theme.spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.neutral[200],
-  },
-  agentRankContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  agentRank: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: theme.spacing.lg,
-    ...theme.shadows.medium,
-  },
-  agentRankText: {
-    ...theme.typography.bodyMedium,
-    color: theme.colors.text.inverse,
-    fontWeight: "900",
-  },
-  agentInfo: {
-    flex: 1,
-  },
-  agentComparisonName: {
-    ...theme.typography.bodyMedium,
-    color: theme.colors.text.primary,
-    fontWeight: "800",
-    marginBottom: theme.spacing.xs,
-  },
-  agentComparisonBalance: {
-    ...theme.typography.body,
-    color: theme.colors.text.secondary,
-    fontWeight: "700",
-  },
-  agentPerformanceBarContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-    marginLeft: theme.spacing.lg,
-  },
-  agentPerformanceBarTrack: {
-    flex: 1,
-    height: 8,
-    backgroundColor: theme.colors.neutral[200],
-    borderRadius: 4,
-    marginRight: theme.spacing.md,
-    overflow: "hidden",
-  },
-  agentPerformanceBarFill: {
-    height: "100%",
-    borderRadius: 4,
-  },
-
   // ==================== PERFORMANCE RING STYLES ====================
   performanceRing: {
     justifyContent: "center",
@@ -3575,60 +3602,66 @@ const styles = StyleSheet.create({
     color: theme.colors.text.secondary,
     fontWeight: "600",
     marginTop: theme.spacing.xs,
+    fontSize: 12,
   },
   progressInfo: {
     alignItems: "center",
+    paddingHorizontal: theme.spacing.lg,
   },
   progressTitle: {
-    ...theme.typography.h3,
+    fontSize: screenWidth < 768 ? 16 : 18,
+    fontWeight: "800",
     color: theme.colors.text.primary,
     marginBottom: theme.spacing.xs,
-    fontWeight: "800",
+    textAlign: "center",
   },
   progressSubtitle: {
-    ...theme.typography.bodyMedium,
+    fontSize: 14,
+    fontWeight: "500",
     color: theme.colors.text.secondary,
     textAlign: "center",
   },
-
   // ==================== SUMMARY ROW STYLES ====================
   modernSummaryRow: {
     flexDirection: "row",
     justifyContent: "space-around",
+    flexWrap: "wrap",
   },
   modernSummaryItem: {
     alignItems: "center",
     flex: 1,
+    minWidth: screenWidth < 768 ? "30%" : "auto",
+    marginVertical: theme.spacing.sm,
   },
   modernSummaryIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: screenWidth < 768 ? 48 : 56,
+    height: screenWidth < 768 ? 48 : 56,
+    borderRadius: screenWidth < 768 ? 24 : 28,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
     ...theme.shadows.large,
   },
   modernSummaryValue: {
-    ...theme.typography.h3,
-    color: theme.colors.text.primary,
+    fontSize: screenWidth < 768 ? 16 : 18,
     fontWeight: "900",
+    color: theme.colors.text.primary,
     marginBottom: theme.spacing.xs,
+    textAlign: "center",
   },
   modernSummaryLabel: {
-    ...theme.typography.captionMedium,
+    fontSize: 11,
+    fontWeight: "600",
     color: theme.colors.text.secondary,
     textAlign: "center",
-    fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-
   // ==================== AGENT CARD STYLES ====================
   modernAgentCard: {
     backgroundColor: theme.colors.surface.primary,
     borderRadius: theme.borderRadius.xl,
-    padding: theme.spacing.xl,
+    padding: screenWidth < 768 ? theme.spacing.lg : theme.spacing.xl,
     marginBottom: theme.spacing.lg,
     borderLeftWidth: 4,
     borderLeftColor: theme.colors.primary[500],
@@ -3639,50 +3672,54 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: theme.spacing.lg,
+    flexWrap: "wrap",
   },
   modernAgentInfo: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
+    marginRight: theme.spacing.md,
+    marginBottom: screenWidth < 768 ? theme.spacing.sm : 0,
   },
   modernAgentAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: theme.spacing.lg,
+    marginRight: theme.spacing.md,
     ...theme.shadows.medium,
   },
   modernAgentAvatarText: {
-    ...theme.typography.h3,
+    fontSize: 18,
     color: theme.colors.text.inverse,
     fontWeight: "900",
   },
   modernAgentName: {
-    ...theme.typography.bodyMedium,
-    color: theme.colors.text.primary,
+    fontSize: screenWidth < 768 ? 15 : 16,
     fontWeight: "800",
+    color: theme.colors.text.primary,
     marginBottom: theme.spacing.xs,
   },
   modernAgentType: {
-    ...theme.typography.captionMedium,
+    fontSize: 12,
+    fontWeight: "600",
     color: theme.colors.text.secondary,
     marginBottom: theme.spacing.xs,
-    fontWeight: "600",
   },
   modernAgentPhone: {
-    ...theme.typography.caption,
+    fontSize: 11,
     color: theme.colors.text.tertiary,
+    fontWeight: "500",
   },
   modernAgentStatus: {
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.borderRadius.full,
     ...theme.shadows.small,
   },
   modernAgentStatusText: {
-    ...theme.typography.caption,
+    fontSize: 10,
     color: theme.colors.text.inverse,
     fontWeight: "800",
     textTransform: "uppercase",
@@ -3695,21 +3732,24 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
     backgroundColor: theme.colors.background.tertiary,
     borderRadius: theme.borderRadius.md,
+    flexWrap: "wrap",
   },
   modernAgentMetric: {
     alignItems: "center",
     flex: 1,
+    minWidth: screenWidth < 768 ? "30%" : "auto",
+    marginVertical: theme.spacing.xs,
   },
   modernAgentMetricLabel: {
-    ...theme.typography.captionMedium,
+    fontSize: 11,
+    fontWeight: "600",
     color: theme.colors.text.secondary,
     marginBottom: theme.spacing.xs,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    fontWeight: "600",
   },
   modernAgentMetricValue: {
-    ...theme.typography.bodyMedium,
+    fontSize: screenWidth < 768 ? 14 : 15,
     color: theme.colors.text.primary,
     fontWeight: "900",
   },
@@ -3720,6 +3760,7 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.lg,
     borderTopWidth: 1,
     borderTopColor: theme.colors.neutral[200],
+    flexWrap: "wrap",
   },
   modernAgentNetChange: {
     alignItems: "flex-end",
@@ -3727,23 +3768,22 @@ const styles = StyleSheet.create({
     marginLeft: theme.spacing.lg,
   },
   modernAgentNetChangeLabel: {
-    ...theme.typography.captionMedium,
+    fontSize: 11,
+    fontWeight: "600",
     color: theme.colors.text.secondary,
     marginBottom: theme.spacing.xs,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    fontWeight: "600",
   },
   modernAgentNetChangeValue: {
-    ...theme.typography.h3,
+    fontSize: screenWidth < 768 ? 16 : 18,
     fontWeight: "900",
   },
-
   // ==================== DEBTOR CARD STYLES ====================
   modernDebtorCard: {
     backgroundColor: theme.colors.surface.primary,
     borderRadius: theme.borderRadius.xl,
-    padding: theme.spacing.xl,
+    padding: screenWidth < 768 ? theme.spacing.lg : theme.spacing.xl,
     marginBottom: theme.spacing.lg,
     borderLeftWidth: 4,
     ...theme.shadows.medium,
@@ -3753,52 +3793,56 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: theme.spacing.lg,
+    flexWrap: "wrap",
   },
   debtorInfo: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
+    marginRight: theme.spacing.md,
+    marginBottom: screenWidth < 768 ? theme.spacing.sm : 0,
   },
   debtorAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: theme.spacing.lg,
-    ...theme.shadows.medium,
+    marginRight: theme.spacing.md,
+    ...theme.shadows.small,
   },
   debtorAvatarText: {
-    ...theme.typography.h3,
+    fontSize: 18,
     fontWeight: "900",
   },
   debtorDetails: {
     flex: 1,
   },
   debtorName: {
-    ...theme.typography.bodyMedium,
-    color: theme.colors.text.primary,
+    fontSize: screenWidth < 768 ? 14 : 15,
     fontWeight: "800",
+    color: theme.colors.text.primary,
     marginBottom: theme.spacing.xs,
   },
   debtorAgent: {
-    ...theme.typography.captionMedium,
+    fontSize: 12,
+    fontWeight: "600",
     color: theme.colors.text.secondary,
     marginBottom: theme.spacing.xs,
-    fontWeight: "600",
   },
   debtorPhone: {
-    ...theme.typography.caption,
+    fontSize: 11,
     color: theme.colors.text.tertiary,
+    fontWeight: "500",
   },
   riskBadge: {
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.borderRadius.full,
     ...theme.shadows.small,
   },
   riskBadgeText: {
-    ...theme.typography.caption,
+    fontSize: 10,
     color: theme.colors.text.inverse,
     fontWeight: "800",
     textTransform: "uppercase",
@@ -3818,19 +3862,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   debtorMetricLabel: {
-    ...theme.typography.captionMedium,
+    fontSize: 11,
+    fontWeight: "600",
     color: theme.colors.text.secondary,
     marginBottom: theme.spacing.xs,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    fontWeight: "600",
   },
   debtorMetricValue: {
-    ...theme.typography.bodyMedium,
+    fontSize: screenWidth < 768 ? 13 : 14,
     fontWeight: "900",
   },
   debtorStatus: {
-    ...theme.typography.bodyMedium,
+    fontSize: screenWidth < 768 ? 13 : 14,
     fontWeight: "900",
   },
   debtorProgress: {
@@ -3850,12 +3894,11 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   debtorProgressText: {
-    ...theme.typography.captionMedium,
+    fontSize: 12,
+    fontWeight: "600",
     color: theme.colors.text.secondary,
     textAlign: "center",
-    fontWeight: "600",
   },
-
   // ==================== ACTIVITY CARD STYLES ====================
   activityCard: {
     backgroundColor: theme.colors.background.tertiary,
@@ -3871,32 +3914,32 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   activityIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: theme.spacing.lg,
+    marginRight: theme.spacing.md,
   },
   activityContent: {
     flex: 1,
   },
   activityTitle: {
-    ...theme.typography.bodyMedium,
-    color: theme.colors.text.primary,
+    fontSize: screenWidth < 768 ? 14 : 15,
     fontWeight: "800",
+    color: theme.colors.text.primary,
     marginBottom: theme.spacing.xs,
   },
   activityDescription: {
-    ...theme.typography.caption,
+    fontSize: 12,
     color: theme.colors.text.secondary,
     marginBottom: theme.spacing.xs,
     lineHeight: 16,
+    fontWeight: "500",
   },
   activityTime: {
-    ...theme.typography.caption,
-    color: theme.colors.text.tertiary,
     fontSize: 10,
+    color: theme.colors.text.tertiary,
     fontWeight: "600",
   },
   activityAmount: {
@@ -3904,42 +3947,44 @@ const styles = StyleSheet.create({
     marginLeft: theme.spacing.md,
   },
   activityAmountText: {
-    ...theme.typography.bodyMedium,
+    fontSize: screenWidth < 768 ? 13 : 14,
     fontWeight: "900",
   },
-
   // ==================== PERFORMANCE METRICS STYLES ====================
   performanceMetricsGrid: {
     flexDirection: "row",
     justifyContent: "space-around",
     paddingVertical: theme.spacing.lg,
+    flexWrap: "wrap",
   },
   performanceMetric: {
     alignItems: "center",
     flex: 1,
+    minWidth: screenWidth < 768 ? "30%" : "auto",
     paddingHorizontal: theme.spacing.sm,
+    marginVertical: theme.spacing.sm,
   },
   performanceMetricIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: screenWidth < 768 ? 56 : 64,
+    height: screenWidth < 768 ? 56 : 64,
+    borderRadius: screenWidth < 768 ? 28 : 32,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
     ...theme.shadows.large,
   },
   performanceMetricValue: {
-    ...theme.typography.h1,
+    fontSize: screenWidth < 768 ? 20 : 24,
     color: theme.colors.text.primary,
     fontWeight: "900",
     marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.xs,
   },
   performanceMetricLabel: {
-    ...theme.typography.captionMedium,
+    fontSize: 11,
+    fontWeight: "600",
     color: theme.colors.text.secondary,
     textAlign: "center",
-    fontWeight: "600",
     marginBottom: theme.spacing.md,
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -3956,59 +4001,57 @@ const styles = StyleSheet.create({
     height: "100%",
     borderRadius: 4,
   },
-
   // ==================== EMPTY STATE STYLES ====================
   modernEmptyState: {
     alignItems: "center",
-    paddingVertical: theme.spacing.xxxl * 1.5,
+    paddingVertical:
+      screenWidth < 768 ? theme.spacing.xxxl : theme.spacing.xxxl * 1.5,
+    paddingHorizontal: theme.spacing.lg,
   },
   modernEmptyIcon: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: screenWidth < 768 ? 80 : 96,
+    height: screenWidth < 768 ? 80 : 96,
+    borderRadius: screenWidth < 768 ? 40 : 48,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: theme.spacing.xxl,
     ...theme.shadows.large,
   },
   modernEmptyTitle: {
-    ...theme.typography.h2,
+    fontSize: screenWidth < 768 ? 18 : 20,
+    fontWeight: "800",
     color: theme.colors.text.primary,
     marginBottom: theme.spacing.md,
-    fontWeight: "800",
+    textAlign: "center",
   },
   modernEmptySubtitle: {
-    ...theme.typography.bodyMedium,
+    fontSize: 14,
+    fontWeight: "500",
     color: theme.colors.text.secondary,
     textAlign: "center",
-    marginBottom: theme.spacing.xxxl,
-    lineHeight: 24,
-    paddingHorizontal: theme.spacing.xxl,
+    marginBottom: theme.spacing.xxl,
+    lineHeight: 22,
+    paddingHorizontal: theme.spacing.lg,
   },
   modernEmptyButton: {
     alignSelf: "stretch",
-    marginHorizontal: theme.spacing.xxl,
+    marginHorizontal: theme.spacing.xl,
   },
   modernEmptyButtonGradient: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.xxl,
+    paddingHorizontal: theme.spacing.xl,
     borderRadius: theme.borderRadius.lg,
+    minHeight: 56,
     ...theme.shadows.medium,
   },
   modernEmptyButtonText: {
-    ...theme.typography.bodyMedium,
+    fontSize: 15,
     color: theme.colors.text.inverse,
     fontWeight: "800",
     marginLeft: theme.spacing.sm,
-  },
-  agentComparisonBalance: {
-    ...theme.typography.body,
-    color: theme.colors.text.secondary,
-    fontWeight: "700",
-    fontSize: 14, // Make sure there's a visible font size
   },
 });
 

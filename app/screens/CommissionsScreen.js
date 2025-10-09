@@ -15,7 +15,6 @@ import {
   Modal,
   Platform,
 } from "react-native";
-
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -38,7 +37,8 @@ const CustomDropdown = ({
   placeholder = "Select an option",
   labelKey = "label",
   valueKey = "value",
-  disabled = false 
+  disabled = false,
+  zIndex = 1000
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -54,11 +54,16 @@ const CustomDropdown = ({
   };
 
   return (
-    <View style={styles.dropdownContainer}>
+    <View style={[styles.dropdownContainer, { zIndex }]}>
       <TouchableOpacity
-        style={[styles.dropdownButton, disabled && styles.dropdownDisabled]}
+        style={[
+          styles.dropdownButton,
+          disabled && styles.dropdownDisabled,
+          isOpen && styles.dropdownButtonOpen
+        ]}
         onPress={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
+        activeOpacity={0.7}
       >
         <Text style={[
           styles.dropdownButtonText,
@@ -70,10 +75,10 @@ const CustomDropdown = ({
         <Icon 
           name={isOpen ? "keyboard-arrow-up" : "keyboard-arrow-down"} 
           size={24} 
-          color={disabled ? "#9CA3AF" : "#6B7280"} 
+          color={disabled ? "#9CA3AF" : isOpen ? "#3B82F6" : "#6B7280"} 
         />
       </TouchableOpacity>
-
+      
       {isOpen && (
         <View style={styles.dropdownList}>
           <ScrollView 
@@ -86,9 +91,11 @@ const CustomDropdown = ({
                 key={item[valueKey] || index}
                 style={[
                   styles.dropdownItem,
-                  selectedValue === item[valueKey] && styles.dropdownItemSelected
+                  selectedValue === item[valueKey] && styles.dropdownItemSelected,
+                  index === data.length - 1 && styles.dropdownItemLast
                 ]}
                 onPress={() => handleSelect(item)}
+                activeOpacity={0.7}
               >
                 <Text style={[
                   styles.dropdownItemText,
@@ -97,7 +104,9 @@ const CustomDropdown = ({
                   {item[labelKey]}
                 </Text>
                 {selectedValue === item[valueKey] && (
-                  <Icon name="check" size={20} color="#3B82F6" />
+                  <View style={styles.checkIconContainer}>
+                    <Icon name="check-circle" size={20} color="#3B82F6" />
+                  </View>
                 )}
               </TouchableOpacity>
             ))}
@@ -121,6 +130,15 @@ const CommissionScreen = () => {
   const [selectedCommission, setSelectedCommission] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
 
+  // Format currency in TSh
+  const formatCurrency = (amount) => {
+    const numAmount = Number(amount) || 0;
+    return `TSh ${numAmount.toLocaleString('en-TZ', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })}`;
+  };
+
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -131,7 +149,6 @@ const CommissionScreen = () => {
         Alert.alert("Error", "Failed to fetch user data.");
       }
     };
-
     fetchUserData();
   }, []);
 
@@ -156,10 +173,10 @@ const CommissionScreen = () => {
         uid: userData.uid,
       };
   
-      const response = await getAgents(headers); // response is already response.data
-      console.log("API Response:", response);
+      const response = await getAgents(headers);
+      console.log("Agents API Response:", response);
   
-      const agentsData = response || []; // use response directly
+      const agentsData = response || [];
       setAgents(agentsData);
   
       if (agentsData.length > 0) {
@@ -171,7 +188,6 @@ const CommissionScreen = () => {
     }
   };
   
-
   const fetchCommissions = async () => {
     setLoading(true);
     try {
@@ -179,10 +195,18 @@ const CommissionScreen = () => {
         month: selectedMonth,
         year: selectedYear,
       });
-      setCommissions(response.data || []);
+      
+      console.log("Commissions API Response:", response);
+      
+      // Handle different response structures
+      const commissionsData = response?.data || response?.commissions || response || [];
+      
+      console.log("Processed commissions data:", commissionsData);
+      setCommissions(Array.isArray(commissionsData) ? commissionsData : []);
     } catch (error) {
       console.error("Error fetching commissions:", error);
       Alert.alert("Error", "Failed to load commissions.");
+      setCommissions([]);
     } finally {
       setLoading(false);
     }
@@ -190,7 +214,7 @@ const CommissionScreen = () => {
 
   const addCommission = async () => {
     console.log("Starting addCommission function");
-
+    
     if (!amount || isNaN(amount) || !agentId) {
       console.log("Validation failed: amount or agentId is missing or invalid");
       Alert.alert("Error", "Please enter a valid amount and select an agent.");
@@ -199,8 +223,8 @@ const CommissionScreen = () => {
 
     try {
       console.log("Selected Agent ID:", agentId);
-
       const agentExists = agents.some(agent => agent.id === agentId);
+      
       if (!agentExists) {
         console.log("Agent does not exist with ID:", agentId);
         Alert.alert("Error", "Selected agent does not exist.");
@@ -216,11 +240,9 @@ const CommissionScreen = () => {
       };
 
       console.log("Creating commission with data:", commissionPayload);
-
       const response = await createCommission(commissionPayload);
-
       console.log("Commission created successfully:", response);
-
+      
       Alert.alert("Success", "Commission added successfully.");
       setAmount("");
       setDescription("");
@@ -233,7 +255,7 @@ const CommissionScreen = () => {
 
   const renderCommissionItem = ({ item, index }) => {
     const amountValue = Number(item.amount) || 0;
-
+    
     return (
       <TouchableOpacity 
         onPress={() => {
@@ -265,7 +287,7 @@ const CommissionScreen = () => {
                 <View style={styles.dateContainer}>
                   <Icon name="schedule" size={14} color="#8B9DC3" />
                   <Text style={styles.date}>
-                    {new Date(item.date).toLocaleDateString("en-US", {
+                    {new Date(item.date || item.created_at).toLocaleDateString("en-US", {
                       day: "numeric",
                       month: "short",
                       year: "numeric",
@@ -275,7 +297,7 @@ const CommissionScreen = () => {
               </View>
             </View>
             <View style={styles.amountContainer}>
-              <Text style={styles.amount}>${amountValue.toFixed(2)}</Text>
+              <Text style={styles.amount}>{formatCurrency(amountValue)}</Text>
               <View style={styles.amountBadge}>
                 <Icon name="trending-up" size={16} color="#10B981" />
               </View>
@@ -309,27 +331,49 @@ const CommissionScreen = () => {
             
             <View style={styles.modalBody}>
               <View style={styles.modalRow}>
-                <Icon name="person" size={20} color="#3B82F6" />
-                <Text style={styles.modalLabel}>Agent:</Text>
-                <Text style={styles.modalValue}>{commission.agent_name}</Text>
+                <View style={styles.modalIconContainer}>
+                  <Icon name="person" size={20} color="#3B82F6" />
+                </View>
+                <View style={styles.modalRowContent}>
+                  <Text style={styles.modalLabel}>Agent</Text>
+                  <Text style={styles.modalValue}>{commission.agent_name || "Unknown Agent"}</Text>
+                </View>
               </View>
               
               <View style={styles.modalRow}>
-                <Icon name="attach-money" size={20} color="#10B981" />
-                <Text style={styles.modalLabel}>Amount:</Text>
-                <Text style={[styles.modalValue, styles.modalAmount]}>${amountValue.toFixed(2)}</Text>
+                <View style={styles.modalIconContainer}>
+                  <Icon name="attach-money" size={20} color="#10B981" />
+                </View>
+                <View style={styles.modalRowContent}>
+                  <Text style={styles.modalLabel}>Amount</Text>
+                  <Text style={[styles.modalValue, styles.modalAmount]}>
+                    {formatCurrency(amountValue)}
+                  </Text>
+                </View>
               </View>
               
               <View style={styles.modalRow}>
-                <Icon name="description" size={20} color="#8B5CF6" />
-                <Text style={styles.modalLabel}>Description:</Text>
-                <Text style={styles.modalValue}>{commission.description || "No description"}</Text>
+                <View style={styles.modalIconContainer}>
+                  <Icon name="description" size={20} color="#8B5CF6" />
+                </View>
+                <View style={styles.modalRowContent}>
+                  <Text style={styles.modalLabel}>Description</Text>
+                  <Text style={styles.modalValue}>
+                    {commission.description || "No description"}
+                  </Text>
+                </View>
               </View>
               
               <View style={styles.modalRow}>
-                <Icon name="schedule" size={20} color="#F59E0B" />
-                <Text style={styles.modalLabel}>Date:</Text>
-                <Text style={styles.modalValue}>{new Date(commission.date).toLocaleDateString()}</Text>
+                <View style={styles.modalIconContainer}>
+                  <Icon name="schedule" size={20} color="#F59E0B" />
+                </View>
+                <View style={styles.modalRowContent}>
+                  <Text style={styles.modalLabel}>Date</Text>
+                  <Text style={styles.modalValue}>
+                    {new Date(commission.date || commission.created_at).toLocaleDateString()}
+                  </Text>
+                </View>
               </View>
             </View>
 
@@ -361,20 +405,31 @@ const CommissionScreen = () => {
     value: agent.id
   }));
 
-  const totalCommissions = commissions && commissions.length > 0
-    ? commissions.reduce((sum, item) => sum + item.amount, 0)
+  // Calculate total commissions - FIX FOR "Total This Period"
+  const totalCommissions = commissions && Array.isArray(commissions) && commissions.length > 0
+    ? commissions.reduce((sum, item) => {
+        const itemAmount = Number(item.amount) || 0;
+        console.log(`Adding commission amount: ${itemAmount}`);
+        return sum + itemAmount;
+      }, 0)
     : 0;
-
+  
+  console.log("Total commissions calculated:", totalCommissions);
   const totalCommissionsValue = Number(totalCommissions) || 0;
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
-
+      
       <LinearGradient colors={["#0F172A", "#1E293B", "#334155"]} style={styles.header}>
         <View style={styles.headerContent}>
-          <View style={styles.headerIcon}>
-            <Icon name="monetization-on" size={32} color="#FFFFFF" />
+          <View style={styles.headerIconWrapper}>
+            <LinearGradient
+              colors={['#10B981', '#059669']}
+              style={styles.headerIcon}
+            >
+              <Icon name="monetization-on" size={32} color="#FFFFFF" />
+            </LinearGradient>
           </View>
           <Text style={styles.title}>Commissions</Text>
           <Text style={styles.subtitle}>Manage agent commissions efficiently</Text>
@@ -397,7 +452,9 @@ const CommissionScreen = () => {
             >
               <Icon name="trending-up" size={24} color="#FFFFFF" />
             </LinearGradient>
-            <Text style={styles.statValue}>${totalCommissionsValue.toFixed(2)}</Text>
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+              {formatCurrency(totalCommissionsValue)}
+            </Text>
             <Text style={styles.statLabel}>Total This Period</Text>
           </View>
           <View style={styles.statDivider} />
@@ -432,9 +489,9 @@ const CommissionScreen = () => {
                 selectedValue={selectedMonth}
                 onValueChange={setSelectedMonth}
                 placeholder="Select Month"
+                zIndex={3000}
               />
             </View>
-
             <View style={styles.filterItem}>
               <Text style={styles.filterLabel}>Year</Text>
               <CustomDropdown
@@ -442,6 +499,7 @@ const CommissionScreen = () => {
                 selectedValue={selectedYear}
                 onValueChange={setSelectedYear}
                 placeholder="Select Year"
+                zIndex={2000}
               />
             </View>
           </View>
@@ -466,11 +524,12 @@ const CommissionScreen = () => {
               onValueChange={setAgentId}
               placeholder={agents.length > 0 ? "Choose an agent..." : "Loading agents..."}
               disabled={agents.length === 0}
+              zIndex={1000}
             />
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Amount</Text>
+            <Text style={styles.inputLabel}>Amount (TSh)</Text>
             <View style={styles.inputWrapper}>
               <LinearGradient
                 colors={['#10B981', '#059669']}
@@ -482,7 +541,7 @@ const CommissionScreen = () => {
                 style={styles.input}
                 onChangeText={setAmount}
                 value={amount}
-                placeholder="0.00"
+                placeholder="Enter amount in TSh"
                 keyboardType="numeric"
                 placeholderTextColor="#9CA3AF"
               />
@@ -582,7 +641,7 @@ const CommissionScreen = () => {
             <FlatList
               data={commissions}
               renderItem={renderCommissionItem}
-              keyExtractor={(item) => item.id.toString()}
+              keyExtractor={(item, index) => item.id?.toString() || index.toString()}
               scrollEnabled={false}
               contentContainerStyle={styles.listContainer}
             />
@@ -612,8 +671,20 @@ const styles = StyleSheet.create({
   headerContent: {
     alignItems: "center",
   },
-  headerIcon: {
+  headerIconWrapper: {
     marginBottom: 12,
+  },
+  headerIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#10B981",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
   title: {
     fontSize: 32,
@@ -650,6 +721,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 20,
     elevation: 12,
+    zIndex: 1,
   },
   statItem: {
     flex: 1,
@@ -662,17 +734,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
   },
   statValue: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: "bold",
     color: "#1F2937",
     marginBottom: 4,
+    textAlign: "center",
   },
   statLabel: {
     fontSize: 14,
     color: "#6B7280",
     fontWeight: "600",
+    textAlign: "center",
   },
   statDivider: {
     width: 1,
@@ -690,6 +769,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
+    overflow: 'visible',
+    zIndex: 100,
   },
   formSection: {
     margin: 20,
@@ -702,15 +783,19 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
+    overflow: 'visible',
+    zIndex: 10,
   },
   listSection: {
     margin: 20,
     marginTop: 0,
+    zIndex: 1,
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 20,
+    zIndex: 1,
   },
   sectionIcon: {
     width: 36,
@@ -719,6 +804,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
   },
   sectionTitle: {
     fontSize: 20,
@@ -728,6 +818,7 @@ const styles = StyleSheet.create({
   filterContainer: {
     flexDirection: "row",
     gap: 16,
+    zIndex: 100,
   },
   filterItem: {
     flex: 1,
@@ -742,7 +833,6 @@ const styles = StyleSheet.create({
   // Custom Dropdown Styles
   dropdownContainer: {
     position: 'relative',
-    zIndex: 1000,
   },
   dropdownButton: {
     flexDirection: 'row',
@@ -756,6 +846,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     minHeight: 52,
   },
+  dropdownButtonOpen: {
+    borderColor: '#3B82F6',
+    backgroundColor: '#EFF6FF',
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
   dropdownDisabled: {
     backgroundColor: '#F3F4F6',
     borderColor: '#E5E7EB',
@@ -764,6 +860,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1F2937',
     fontWeight: '500',
+    flex: 1,
   },
   dropdownPlaceholder: {
     color: '#9CA3AF',
@@ -773,25 +870,25 @@ const styles = StyleSheet.create({
   },
   dropdownList: {
     position: 'absolute',
-    top: '100%',
+    top: 52,
     left: 0,
     right: 0,
     backgroundColor: '#FFFFFF',
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: '#3B82F6',
     borderTopWidth: 0,
     borderBottomLeftRadius: 12,
     borderBottomRightRadius: 12,
-    maxHeight: 200,
-    zIndex: 1000,
+    maxHeight: 240,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 20,
+    zIndex: 9999,
   },
   dropdownScrollView: {
-    maxHeight: 200,
+    maxHeight: 240,
   },
   dropdownItem: {
     flexDirection: 'row',
@@ -801,6 +898,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
+    backgroundColor: '#FFFFFF',
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0,
   },
   dropdownItemSelected: {
     backgroundColor: '#EFF6FF',
@@ -808,14 +909,19 @@ const styles = StyleSheet.create({
   dropdownItemText: {
     fontSize: 16,
     color: '#1F2937',
+    flex: 1,
   },
   dropdownItemTextSelected: {
     color: '#3B82F6',
     fontWeight: '600',
   },
+  checkIconContainer: {
+    marginLeft: 8,
+  },
 
   inputGroup: {
     marginBottom: 24,
+    zIndex: 1,
   },
   inputLabel: {
     fontSize: 14,
@@ -828,7 +934,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#F9FAFB",
     borderRadius: 12,
-    borderWidth: 2,
     borderColor: "#E5E7EB",
     paddingRight: 16,
     minHeight: 52,
@@ -866,9 +971,17 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: "hidden",
     marginTop: 12,
+    zIndex: 1,
+    shadowColor: "#3B82F6",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   addButtonDisabled: {
     opacity: 0.6,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   addButtonGradient: {
     flexDirection: "row",
@@ -895,6 +1008,9 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
     marginBottom: 16,
+    zIndex: 1,
+    borderLeftWidth: 4,
+    borderLeftColor: "#3B82F6",
   },
   commissionContent: {
     flexDirection: "row",
@@ -905,6 +1021,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
+    marginRight: 16,
   },
   agentAvatar: {
     width: 52,
@@ -913,6 +1030,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 16,
+    shadowColor: "#3B82F6",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   agentInitial: {
     fontSize: 18,
@@ -948,7 +1070,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   amount: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: "bold",
     color: "#10B981",
     marginBottom: 6,
@@ -963,7 +1085,6 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
-    marginHorizontal: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -982,7 +1103,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
-    marginHorizontal: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -1031,15 +1151,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 24,
     elevation: 20,
+    overflow: 'hidden',
   },
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     padding: 24,
-    paddingBottom: 16,
+    paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
+    backgroundColor: "#F9FAFB",
   },
   modalTitle: {
     fontSize: 22,
@@ -1047,46 +1169,71 @@ const styles = StyleSheet.create({
     color: "#1F2937",
   },
   closeIcon: {
-    padding: 4,
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
   },
   modalBody: {
     padding: 24,
-    paddingTop: 16,
   },
   modalRow: {
     flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 24,
+    paddingBottom: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  modalIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
-    marginBottom: 20,
-    paddingVertical: 8,
+    justifyContent: "center",
+    backgroundColor: "#F3F4F6",
+    marginRight: 16,
+  },
+  modalRowContent: {
+    flex: 1,
   },
   modalLabel: {
-    fontSize: 16,
+    fontSize: 14,
     color: "#6B7280",
     fontWeight: "600",
-    marginLeft: 12,
-    marginRight: 8,
-    minWidth: 80,
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   modalValue: {
     fontSize: 16,
     color: "#1F2937",
     fontWeight: "500",
-    flex: 1,
+    lineHeight: 24,
   },
   modalAmount: {
     color: "#10B981",
     fontWeight: "bold",
-    fontSize: 18,
+    fontSize: 20,
   },
   closeButton: {
     margin: 20,
     marginTop: 0,
     borderRadius: 16,
     overflow: "hidden",
+    shadowColor: "#3B82F6",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   closeButtonGradient: {
     paddingVertical: 16,
     alignItems: "center",
+  },
+  closeButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
   },
 });
 

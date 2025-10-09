@@ -18,6 +18,7 @@ import { getUserData } from '../services/auth';
 import { getAgents, createAgent, createAgentTransaction } from '../services/api';
 
 const { width: screenWidth } = Dimensions.get('window');
+const API_BASE_URL = 'http://192.168.1.200:3001';
 
 class AgentsScreen extends Component {
   constructor(props) {
@@ -43,6 +44,7 @@ class AgentsScreen extends Component {
   componentDidMount() {
     this.fetchAgents();
   }
+
   fetchAgents = async () => {
     try {
       this.setState({ loading: true });
@@ -52,23 +54,96 @@ class AgentsScreen extends Component {
         'access-token': userData.userToken,
         client: userData.client,
         uid: userData.uid,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
       };
   
-      const response = await getAgents(headers); // response.data is already handled inside getAgents
-      console.log('Fetched agents:', response);
+      const response = await getAgents(headers);
+      console.log('Fetched agents raw response:', response);
   
-      // Map agents to UI-friendly structure
-      const agents = (response || []).map(agent => ({
-        id: agent.id,
-        name: agent.name,
-        phone: agent.phone || 'N/A',
-        balance: agent.latest_balance || 0, // you may need to adjust depending on your API
-        type_of_agent: agent.type_of_agent || agent.type,
-        created_at: agent.created_at,
-        status: agent.status || 'needs_update',
-      }));
+      if (!Array.isArray(response)) {
+        console.error('Response is not an array:', response);
+        this.setState({ agents: [], loading: false, refreshing: false });
+        return;
+      }
   
-      this.setState({ agents, loading: false, refreshing: false });
+      // Fetch transactions for each agent to get their latest balance
+      const agentsWithBalances = await Promise.all(
+        response.map(async (agent) => {
+          try {
+            // Fetch transactions for this specific agent
+            const transactionsResponse = await fetch(
+              `${API_BASE_URL}/employees/agents/${agent.id}/transactions`,
+              {
+                method: 'GET',
+                headers: headers,
+              }
+            );
+  
+            let balance = 0;
+            let openingBalance = 0;
+            let closingBalance = 0;
+  
+            if (transactionsResponse.ok) {
+              const transactionsData = await transactionsResponse.json();
+              const transactions = transactionsData?.data || transactionsData?.transactions || transactionsData || [];
+  
+              console.log(`Agent ${agent.name} transactions:`, transactions);
+  
+              if (Array.isArray(transactions) && transactions.length > 0) {
+                // Sort by date to get most recent
+                const sortedTransactions = transactions.sort((a, b) => {
+                  const dateA = new Date(a.created_at || a.date);
+                  const dateB = new Date(b.created_at || b.date);
+                  return dateB - dateA;
+                });
+  
+                const latestTransaction = sortedTransactions[0];
+                console.log(`Latest transaction for ${agent.name}:`, latestTransaction);
+  
+                openingBalance = parseFloat(latestTransaction.opening_balance) || 0;
+                closingBalance = parseFloat(latestTransaction.closing_balance) || 0;
+                balance = closingBalance;
+              }
+            } else {
+              console.log(`No transactions found for agent ${agent.name}`);
+            }
+  
+            return {
+              id: agent.id,
+              name: agent.name || 'Unknown Agent',
+              phone: agent.phone || 'N/A',
+              balance: balance,
+              type_of_agent: agent.type_of_agent || 'Agent',
+              created_at: agent.created_at,
+              opening_balance: openingBalance,
+              closing_balance: closingBalance,
+              status: balance > 0 ? 'active' : 'needs_update',
+            };
+          } catch (error) {
+            console.error(`Error fetching transactions for agent ${agent.name}:`, error);
+            // Return agent with 0 balance if transaction fetch fails
+            return {
+              id: agent.id,
+              name: agent.name || 'Unknown Agent',
+              phone: agent.phone || 'N/A',
+              balance: 0,
+              type_of_agent: agent.type_of_agent || 'Agent',
+              created_at: agent.created_at,
+              opening_balance: 0,
+              closing_balance: 0,
+              status: 'needs_update',
+            };
+          }
+        })
+      );
+  
+      console.log('Agents with balances:', agentsWithBalances);
+      this.setState({ 
+        agents: agentsWithBalances, 
+        loading: false, 
+        refreshing: false 
+      });
     } catch (error) {
       console.error('Error fetching agents:', error);
       this.setState({ loading: false, refreshing: false });
@@ -76,8 +151,6 @@ class AgentsScreen extends Component {
     }
   };
   
-  
-
   handleRefresh = () => {
     this.setState({ refreshing: true }, () => {
       this.fetchAgents();
@@ -102,7 +175,7 @@ class AgentsScreen extends Component {
 
   handleTransactionSubmit = async () => {
     const { selectedAgent, transactionAmount, transactionType } = this.state;
-
+    
     if (!transactionAmount || isNaN(transactionAmount)) {
       Alert.alert('Error', 'Please enter a valid amount');
       return;
@@ -135,7 +208,7 @@ class AgentsScreen extends Component {
 
   handleCreateAgent = async () => {
     const { newAgentName, newAgentPhone, newAgentBalance } = this.state;
-
+    
     if (!newAgentName || !newAgentPhone || !newAgentBalance) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -180,10 +253,20 @@ class AgentsScreen extends Component {
     );
   };
 
+  // Updated for TSh (Tanzanian Shillings)
   getBalanceColor = (balance) => {
-    if (balance > 1000) return '#10B981'; // Green
-    if (balance > 500) return '#F59E0B'; // Yellow
-    return '#EF4444'; // Red
+    if (balance > 5000000) return '#10B981'; // Green - over 5M TSh
+    if (balance > 1000000) return '#F59E0B'; // Yellow - over 1M TSh
+    return '#EF4444'; // Red - under 1M TSh
+  };
+
+  // Format currency in TSh
+  formatCurrency = (amount) => {
+    const numAmount = Number(amount) || 0;
+    return `TSh ${numAmount.toLocaleString('en-TZ', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })}`;
   };
 
   renderAgentGridItem = ({ item }) => (
@@ -211,8 +294,8 @@ class AgentsScreen extends Component {
       
       <View style={styles.balanceContainer}>
         <Text style={styles.balanceLabel}>Balance</Text>
-        <Text style={[styles.balanceAmount, { color: this.getBalanceColor(item.balance || 0) }]}>
-          ${(item.balance || 0).toFixed(2)}
+        <Text style={[styles.balanceAmount, { color: this.getBalanceColor(item.balance || 0) }]} numberOfLines={1}>
+          {this.formatCurrency(item.balance || 0)}
         </Text>
       </View>
     </TouchableOpacity>
@@ -236,8 +319,8 @@ class AgentsScreen extends Component {
       </View>
       
       <View style={styles.agentActions}>
-        <Text style={[styles.balanceAmountList, { color: this.getBalanceColor(item.balance || 0) }]}>
-          ${(item.balance || 0).toFixed(2)}
+        <Text style={[styles.balanceAmountList, { color: this.getBalanceColor(item.balance || 0) }]} numberOfLines={1}>
+          {this.formatCurrency(item.balance || 0)}
         </Text>
         <TouchableOpacity
           style={styles.actionButton}
@@ -274,7 +357,6 @@ class AgentsScreen extends Component {
             <TouchableOpacity
               style={styles.editButton}
               onPress={() => {
-                // Handle edit action
                 console.log('Edit agent:', selectedAgent);
               }}
             >
@@ -301,14 +383,14 @@ class AgentsScreen extends Component {
                 <View style={styles.balanceItem}>
                   <Text style={styles.balanceItemLabel}>Current Balance</Text>
                   <Text style={[styles.balanceItemValue, { color: this.getBalanceColor(selectedAgent.balance || 0) }]}>
-                    ${(selectedAgent.balance || 0).toFixed(2)}
+                    {this.formatCurrency(selectedAgent.balance || 0)}
                   </Text>
                 </View>
                 <View style={styles.balanceItem}>
                   <Text style={styles.balanceItemLabel}>Status</Text>
                   <View style={[styles.statusBadge, { backgroundColor: this.getBalanceColor(selectedAgent.balance || 0) }]}>
                     <Text style={styles.statusText}>
-                      {(selectedAgent.balance || 0) > 500 ? 'Active' : 'Low Balance'}
+                      {(selectedAgent.balance || 0) > 1000000 ? 'Active' : 'Low Balance'}
                     </Text>
                   </View>
                 </View>
@@ -354,7 +436,6 @@ class AgentsScreen extends Component {
                 <TouchableOpacity
                   style={[styles.actionCard, { backgroundColor: '#6366F1' }]}
                   onPress={() => {
-                    // Handle view transactions
                     console.log('View transactions for:', selectedAgent);
                   }}
                 >
@@ -365,7 +446,6 @@ class AgentsScreen extends Component {
                 <TouchableOpacity
                   style={[styles.actionCard, { backgroundColor: '#F59E0B' }]}
                   onPress={() => {
-                    // Handle generate report
                     console.log('Generate report for:', selectedAgent);
                   }}
                 >
@@ -487,7 +567,7 @@ class AgentsScreen extends Component {
           onRefresh={this.handleRefresh}
           contentContainerStyle={styles.listContainer}
           numColumns={viewMode === 'grid' ? 2 : 1}
-          key={viewMode} // Force re-render when view mode changes
+          key={viewMode}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Icon name="people-outline" size={64} color="#D1D5DB" />
@@ -519,22 +599,18 @@ class AgentsScreen extends Component {
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>
-                  Add Transaction
-                </Text>
-                <Text style={styles.modalSubtitle}>
-                  {selectedAgent?.name}
-                </Text>
+                <Text style={styles.modalTitle}>Add Transaction</Text>
+                <Text style={styles.modalSubtitle}>{selectedAgent?.name}</Text>
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Amount</Text>
+                <Text style={styles.label}>Amount (TSh)</Text>
                 <TextInput
                   style={styles.input}
                   keyboardType="numeric"
                   value={transactionAmount}
                   onChangeText={text => this.setState({ transactionAmount: text })}
-                  placeholder="Enter amount"
+                  placeholder="Enter amount in TSh"
                 />
               </View>
 
@@ -615,13 +691,13 @@ class AgentsScreen extends Component {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Initial Balance</Text>
+                <Text style={styles.label}>Initial Balance (TSh)</Text>
                 <TextInput
                   style={styles.input}
                   keyboardType="numeric"
                   value={newAgentBalance}
                   onChangeText={text => this.setState({ newAgentBalance: text })}
-                  placeholder="Enter initial balance"
+                  placeholder="Enter initial balance in TSh"
                 />
               </View>
 
@@ -777,7 +853,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   balanceAmount: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
   },
   // List View Styles
@@ -812,7 +888,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   balanceAmountList: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 8,
   },
@@ -950,7 +1026,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   balanceItemValue: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
   },
   statusBadge: {
