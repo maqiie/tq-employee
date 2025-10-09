@@ -43,30 +43,40 @@ class AgentsScreen extends Component {
   componentDidMount() {
     this.fetchAgents();
   }
-
   fetchAgents = async () => {
     try {
       this.setState({ loading: true });
+  
       const userData = await getUserData();
-      
-      if (!userData.userToken || !userData.client || !userData.uid) {
-        throw new Error('Missing authentication headers');
-      }
-
       const headers = {
         'access-token': userData.userToken,
-        'client': userData.client,
-        'uid': userData.uid,
+        client: userData.client,
+        uid: userData.uid,
       };
-
-      const response = await getAgents(headers);
-      this.setState({ agents: response.data, loading: false, refreshing: false });
+  
+      const response = await getAgents(headers); // response.data is already handled inside getAgents
+      console.log('Fetched agents:', response);
+  
+      // Map agents to UI-friendly structure
+      const agents = (response || []).map(agent => ({
+        id: agent.id,
+        name: agent.name,
+        phone: agent.phone || 'N/A',
+        balance: agent.latest_balance || 0, // you may need to adjust depending on your API
+        type_of_agent: agent.type_of_agent || agent.type,
+        created_at: agent.created_at,
+        status: agent.status || 'needs_update',
+      }));
+  
+      this.setState({ agents, loading: false, refreshing: false });
     } catch (error) {
-      console.error('Error fetching agents:', error.response?.data || error.message);
+      console.error('Error fetching agents:', error);
       this.setState({ loading: false, refreshing: false });
       Alert.alert('Error', 'Failed to fetch agents');
     }
   };
+  
+  
 
   handleRefresh = () => {
     this.setState({ refreshing: true }, () => {

@@ -606,8 +606,10 @@ const AgentComparisonChart = ({ agents, formatCurrency }) => {
                 <Text style={styles.agentRankText}>{index + 1}</Text>
               </View>
               <View style={styles.agentInfo}>
-                <Text style={styles.agentComparisonName}>{agent.name}</Text>
-                <Text style={styles.agentComparisonBalance}>
+                <Text style={styles.agentComparisonName} numberOfLines={1}>
+                  {agent.name}
+                </Text>
+                <Text style={styles.agentComparisonBalance} numberOfLines={1}>
                   {formatCurrency(balance)}
                 </Text>
               </View>
@@ -4001,6 +4003,12 @@ const styles = StyleSheet.create({
     color: theme.colors.text.inverse,
     fontWeight: "800",
     marginLeft: theme.spacing.sm,
+  },
+  agentComparisonBalance: {
+    ...theme.typography.body,
+    color: theme.colors.text.secondary,
+    fontWeight: "700",
+    fontSize: 14, // Make sure there's a visible font size
   },
 });
 

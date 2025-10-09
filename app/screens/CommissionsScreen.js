@@ -149,18 +149,19 @@ const CommissionScreen = () => {
       if (!userData.userToken || !userData.client || !userData.uid) {
         throw new Error("Missing authentication headers");
       }
-
+  
       const headers = {
         'access-token': userData.userToken,
-        'client': userData.client,
-        'uid': userData.uid,
+        client: userData.client,
+        uid: userData.uid,
       };
-
-      const response = await getAgents(headers);
+  
+      const response = await getAgents(headers); // response is already response.data
       console.log("API Response:", response);
-      const agentsData = response.data || [];
+  
+      const agentsData = response || []; // use response directly
       setAgents(agentsData);
-
+  
       if (agentsData.length > 0) {
         setAgentId(agentsData[0].id);
       }
@@ -169,6 +170,7 @@ const CommissionScreen = () => {
       Alert.alert("Error", "Failed to load agents.");
     }
   };
+  
 
   const fetchCommissions = async () => {
     setLoading(true);
