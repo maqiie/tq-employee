@@ -556,31 +556,33 @@ const ModernDebtorCard = ({ debtor, formatCurrency, onPress }) => {
   );
 };
 
-
 const AgentComparisonChart = ({ agents, formatCurrency }) => {
   // Add safety check
   if (!agents || agents.length === 0) {
     return null;
   }
-  
+
   const sortedAgents = [...agents].sort((a, b) => {
     const balanceA = parseFloat(a.latest_balance || a.closing_balance) || 0;
     const balanceB = parseFloat(b.latest_balance || b.closing_balance) || 0;
     return balanceB - balanceA;
   });
-  
+
   const topAgents = sortedAgents.slice(0, 5);
-  
+
   return (
     <View style={styles.agentComparisonContainer}>
       <Text style={styles.modernChartTitle}>Top Performing Agents</Text>
       {topAgents.map((agent, index) => {
-        const balance = parseFloat(agent.latest_balance || agent.closing_balance) || 0;
+        const balance =
+          parseFloat(agent.latest_balance || agent.closing_balance) || 0;
         const maxBalance = Math.max(
-          ...topAgents.map((a) => parseFloat(a.latest_balance || a.closing_balance) || 0)
+          ...topAgents.map(
+            (a) => parseFloat(a.latest_balance || a.closing_balance) || 0
+          )
         );
         const percentage = maxBalance > 0 ? (balance / maxBalance) * 100 : 0;
-        
+
         const rankColors = [
           "#FFD700",
           "#C0C0C0",
@@ -588,7 +590,7 @@ const AgentComparisonChart = ({ agents, formatCurrency }) => {
           theme.colors.primary[500],
           theme.colors.primary[400],
         ];
-        
+
         return (
           <View key={agent.id} style={styles.agentComparisonItem}>
             <View style={styles.agentRankContainer}>
@@ -627,12 +629,12 @@ const AgentComparisonChart = ({ agents, formatCurrency }) => {
                   ]}
                 />
               </View>
-              <AgentPerformanceRing 
+              <AgentPerformanceRing
                 agent={{
                   opening_balance: parseFloat(agent.opening_balance) || 0,
                   closing_balance: balance,
-                }} 
-                size={36} 
+                }}
+                size={36}
               />
             </View>
           </View>
@@ -1069,10 +1071,10 @@ const DashboardScreen = () => {
   }, []);
   const metrics = useMemo(() => {
     const { dailyStats, quickStats, agentsSummary } = dashboardData;
-    
-    console.log('=== METRICS CALCULATION DEBUG ===');
-    console.log('agentsSummary.agents:', agentsSummary.agents);
-    
+
+    console.log("=== METRICS CALCULATION DEBUG ===");
+    console.log("agentsSummary.agents:", agentsSummary.agents);
+
     // Calculate cumulative balance using the LATEST_BALANCE from backend
     // This follows your pattern: latest_balance IS the closing_balance from the most recent transaction
     const cumulativeBalance = agentsSummary.agents.reduce((sum, agent) => {
@@ -1082,40 +1084,42 @@ const DashboardScreen = () => {
       console.log(`Agent ${agent.name}: latest_balance = ${balance}`);
       return sum + balance;
     }, 0);
-    
+
     // Fallback: if agentsSummary is empty, calculate from myAgents
     const fallbackBalance = myAgents.reduce((sum, agent) => {
       const balance = parseFloat(agent.closing_balance) || 0;
       return sum + balance;
     }, 0);
-    
-    const totalBalance = agentsSummary.agents.length > 0 ? cumulativeBalance : fallbackBalance;
-    
-    console.log('CUMULATIVE BALANCE:', totalBalance);
-    console.log('================================');
-    
+
+    const totalBalance =
+      agentsSummary.agents.length > 0 ? cumulativeBalance : fallbackBalance;
+
+    console.log("CUMULATIVE BALANCE:", totalBalance);
+    console.log("================================");
+
     // Calculate today's net change
     const netChange = dailyStats.closingBalance - dailyStats.openingBalance;
-    
+
     return {
       // PRIMARY: Use cumulative balance (persists across days)
       // This is the sum of all agents' latest_balance (their most recent transaction's closing_balance)
       totalBalance: totalBalance,
-      
+
       // TODAY'S STATS: Specific to current day
       todaysOpening: dailyStats.openingBalance,
       todaysClosing: dailyStats.closingBalance,
       todaysChange: netChange,
-      
+
       // OTHER METRICS
       totalTransactions: quickStats.weeklyTransactions || 0,
       totalCommissions: quickStats.monthlyCommissions || 0,
       activeAgents: agentsSummary.agents.length || myAgents.length,
-      
+
       // TRENDS
-      balanceTrend: netChange > 0
-        ? Math.round((netChange / (dailyStats.openingBalance || 1)) * 100)
-        : 0,
+      balanceTrend:
+        netChange > 0
+          ? Math.round((netChange / (dailyStats.openingBalance || 1)) * 100)
+          : 0,
       transactionsTrend: 12,
       commissionsTrend: 25,
     };
@@ -1123,15 +1127,14 @@ const DashboardScreen = () => {
 
   const chartData = useMemo(() => {
     const { agentsSummary } = dashboardData;
-    
-    console.log('=== CHART DATA DEBUG ===');
-    console.log('Agents with balances:', agentsSummary.agents.length);
-    
+
+    console.log("=== CHART DATA DEBUG ===");
+    console.log("Agents with balances:", agentsSummary.agents.length);
+
     // Use agentsSummary.agents - they have latest_balance from their most recent transactions
-    const agentsWithBalances = agentsSummary.agents.length > 0 
-      ? agentsSummary.agents 
-      : myAgents;
-    
+    const agentsWithBalances =
+      agentsSummary.agents.length > 0 ? agentsSummary.agents : myAgents;
+
     // Sort by latest_balance (which IS the closing_balance from last transaction)
     const topAgents = [...agentsWithBalances]
       .sort((a, b) => {
@@ -1140,22 +1143,26 @@ const DashboardScreen = () => {
         return balanceB - balanceA;
       })
       .slice(0, 5);
-    
-    console.log('Top 5 agents:', topAgents.map(a => ({ 
-      name: a.name, 
-      latest_balance: a.latest_balance 
-    })));
-    
+
+    console.log(
+      "Top 5 agents:",
+      topAgents.map((a) => ({
+        name: a.name,
+        latest_balance: a.latest_balance,
+      }))
+    );
+
     const getAgentLabel = (name) => {
       if (!name) return "Agent";
       const firstName = name.split(" ")[0];
       return firstName.length > 8 ? firstName.substring(0, 8) : firstName;
     };
-    
+
     return {
       balanceComparison: topAgents.map((agent) => {
         // Use latest_balance - this is the closing_balance from the agent's most recent transaction
-        const balance = parseFloat(agent.latest_balance || agent.closing_balance) || 0;
+        const balance =
+          parseFloat(agent.latest_balance || agent.closing_balance) || 0;
         return {
           label: getAgentLabel(agent.name),
           value: balance,
@@ -1173,7 +1180,9 @@ const DashboardScreen = () => {
         {
           label: "High Risk",
           value: allDebtors.filter((d) => d.balance_due > 1000000).length,
-          displayValue: allDebtors.filter((d) => d.balance_due > 1000000).length.toString(),
+          displayValue: allDebtors
+            .filter((d) => d.balance_due > 1000000)
+            .length.toString(),
           color: theme.colors.error,
         },
         {
@@ -1181,9 +1190,9 @@ const DashboardScreen = () => {
           value: allDebtors.filter(
             (d) => d.balance_due > 500000 && d.balance_due <= 1000000
           ).length,
-          displayValue: allDebtors.filter(
-            (d) => d.balance_due > 500000 && d.balance_due <= 1000000
-          ).length.toString(),
+          displayValue: allDebtors
+            .filter((d) => d.balance_due > 500000 && d.balance_due <= 1000000)
+            .length.toString(),
           color: theme.colors.warning,
         },
         {
@@ -1191,9 +1200,9 @@ const DashboardScreen = () => {
           value: allDebtors.filter(
             (d) => d.balance_due <= 500000 && d.balance_due > 0
           ).length,
-          displayValue: allDebtors.filter(
-            (d) => d.balance_due <= 500000 && d.balance_due > 0
-          ).length.toString(),
+          displayValue: allDebtors
+            .filter((d) => d.balance_due <= 500000 && d.balance_due > 0)
+            .length.toString(),
           color: theme.colors.success,
         },
       ],
@@ -1201,43 +1210,55 @@ const DashboardScreen = () => {
         {
           label: "Growing",
           value: agentsWithBalances.filter((a) => {
-            const latest = parseFloat(a.latest_balance || a.closing_balance) || 0;
+            const latest =
+              parseFloat(a.latest_balance || a.closing_balance) || 0;
             const opening = parseFloat(a.opening_balance) || 0;
             return latest > opening;
           }).length,
-          displayValue: agentsWithBalances.filter((a) => {
-            const latest = parseFloat(a.latest_balance || a.closing_balance) || 0;
-            const opening = parseFloat(a.opening_balance) || 0;
-            return latest > opening;
-          }).length.toString(),
+          displayValue: agentsWithBalances
+            .filter((a) => {
+              const latest =
+                parseFloat(a.latest_balance || a.closing_balance) || 0;
+              const opening = parseFloat(a.opening_balance) || 0;
+              return latest > opening;
+            })
+            .length.toString(),
           color: theme.colors.secondary[500],
         },
         {
           label: "Stable",
           value: agentsWithBalances.filter((a) => {
-            const latest = parseFloat(a.latest_balance || a.closing_balance) || 0;
+            const latest =
+              parseFloat(a.latest_balance || a.closing_balance) || 0;
             const opening = parseFloat(a.opening_balance) || 0;
             return latest === opening;
           }).length,
-          displayValue: agentsWithBalances.filter((a) => {
-            const latest = parseFloat(a.latest_balance || a.closing_balance) || 0;
-            const opening = parseFloat(a.opening_balance) || 0;
-            return latest === opening;
-          }).length.toString(),
+          displayValue: agentsWithBalances
+            .filter((a) => {
+              const latest =
+                parseFloat(a.latest_balance || a.closing_balance) || 0;
+              const opening = parseFloat(a.opening_balance) || 0;
+              return latest === opening;
+            })
+            .length.toString(),
           color: theme.colors.accent.blue,
         },
         {
           label: "Declining",
           value: agentsWithBalances.filter((a) => {
-            const latest = parseFloat(a.latest_balance || a.closing_balance) || 0;
+            const latest =
+              parseFloat(a.latest_balance || a.closing_balance) || 0;
             const opening = parseFloat(a.opening_balance) || 0;
             return latest < opening;
           }).length,
-          displayValue: agentsWithBalances.filter((a) => {
-            const latest = parseFloat(a.latest_balance || a.closing_balance) || 0;
-            const opening = parseFloat(a.opening_balance) || 0;
-            return latest < opening;
-          }).length.toString(),
+          displayValue: agentsWithBalances
+            .filter((a) => {
+              const latest =
+                parseFloat(a.latest_balance || a.closing_balance) || 0;
+              const opening = parseFloat(a.opening_balance) || 0;
+              return latest < opening;
+            })
+            .length.toString(),
           color: theme.colors.error,
         },
       ],
@@ -1416,7 +1437,7 @@ const DashboardScreen = () => {
                       </Text>
                     </View>
 
-                    {item.badge && item.badge > 0 && (
+                    {typeof item.badge === "number" && item.badge > 0 && (
                       <View style={styles.menuItemBadge}>
                         <Text style={styles.menuItemBadgeText}>
                           {item.badge > 99 ? "99+" : item.badge}
@@ -1745,98 +1766,130 @@ const DashboardScreen = () => {
               </View>
 
               {/* UPDATED Balance Overview Card */}
-<View style={styles.modernCard}>
-  <Text style={styles.modernCardTitle}>Balance Overview</Text>
-  
-  {/* PRIMARY: Cumulative Total Balance - THIS PERSISTS! */}
-  <View style={styles.balancePrimarySection}>
-    <View style={styles.cumulativeBalanceHeader}>
-      <View style={styles.cumulativeIconContainer}>
-        <Icon name="account-balance-wallet" size={24} color={theme.colors.primary[600]} />
-      </View>
-      <Text style={styles.cumulativeBalanceTitle}>
-        TOTAL BALANCE - ALL AGENTS
-      </Text>
-    </View>
-    <Text style={styles.cumulativeBalanceValue}>
-      {formatCurrency(metrics.totalBalance)}
-    </Text>
-    <View style={styles.cumulativeStatsRow}>
-      <View style={styles.cumulativeStat}>
-        <Text style={styles.cumulativeStatLabel}>Active Agents</Text>
-        <Text style={styles.cumulativeStatValue}>
-          {myAgents.length}
-        </Text>
-      </View>
-      <View style={styles.cumulativeStatDivider} />
-      <View style={styles.cumulativeStat}>
-        <Text style={styles.cumulativeStatLabel}>Last Update</Text>
-        <Text style={styles.cumulativeStatValue}>
-          {lastUpdated 
-            ? new Date(lastUpdated).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })
-            : 'Never'}
-        </Text>
-      </View>
-    </View>
-  </View>
-  
-  {/* SECONDARY: Today's Activity */}
-  <View style={styles.balanceSection}>
-    <View style={styles.todayActivityHeader}>
-      <Text style={styles.balanceSectionTitle}>Today's Activity</Text>
-      {dailyStats.hasTodayTransaction && (
-        <View style={styles.hasTransactionBadge}>
-          <Icon name="check-circle" size={14} color={theme.colors.success} />
-          <Text style={styles.hasTransactionText}>Updated</Text>
-        </View>
-      )}
-    </View>
-    <View style={styles.balanceRow}>
-      <View style={styles.balanceItem}>
-        <Text style={styles.balanceLabel}>Opening</Text>
-        <Text style={styles.balanceValue}>
-          {formatCurrency(metrics.todaysOpening)}
-        </Text>
-      </View>
-      <Icon name="arrow-forward" size={24} color={theme.colors.text.secondary} />
-      <View style={styles.balanceItem}>
-        <Text style={styles.balanceLabel}>Closing</Text>
-        <Text style={[styles.balanceValue, { color: theme.colors.secondary[500] }]}>
-          {formatCurrency(metrics.todaysClosing)}
-        </Text>
-      </View>
-    </View>
-  </View>
-  
-  {/* Net Change */}
-  <View style={styles.netChangeContainer}>
-    <View style={styles.netChangeItem}>
-      <Text style={styles.netChangeLabel}>Today's Net Change</Text>
-      <Text style={[styles.netChangeValue, {
-        color: metrics.todaysChange >= 0 ? 
-          theme.colors.secondary[500] : theme.colors.error
-      }]}>
-        {metrics.todaysChange >= 0 ? '+' : ''}
-        {formatCurrency(metrics.todaysChange)}
-      </Text>
-    </View>
-  </View>
-</View>
+              <View style={styles.modernCard}>
+                <Text style={styles.modernCardTitle}>Balance Overview</Text>
+
+                {/* PRIMARY: Cumulative Total Balance - THIS PERSISTS! */}
+                <View style={styles.balancePrimarySection}>
+                  <View style={styles.cumulativeBalanceHeader}>
+                    <View style={styles.cumulativeIconContainer}>
+                      <Icon
+                        name="account-balance-wallet"
+                        size={24}
+                        color={theme.colors.primary[600]}
+                      />
+                    </View>
+                    <Text style={styles.cumulativeBalanceTitle}>
+                      TOTAL BALANCE - ALL AGENTS
+                    </Text>
+                  </View>
+                  <Text style={styles.cumulativeBalanceValue}>
+                    {formatCurrency(metrics.totalBalance)}
+                  </Text>
+                  <View style={styles.cumulativeStatsRow}>
+                    <View style={styles.cumulativeStat}>
+                      <Text style={styles.cumulativeStatLabel}>
+                        Active Agents
+                      </Text>
+                      <Text style={styles.cumulativeStatValue}>
+                        {myAgents.length}
+                      </Text>
+                    </View>
+                    <View style={styles.cumulativeStatDivider} />
+                    <View style={styles.cumulativeStat}>
+                      <Text style={styles.cumulativeStatLabel}>
+                        Last Update
+                      </Text>
+                      <Text style={styles.cumulativeStatValue}>
+                        {lastUpdated
+                          ? new Date(lastUpdated).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : "Never"}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* SECONDARY: Today's Activity */}
+                <View style={styles.balanceSection}>
+                  <View style={styles.todayActivityHeader}>
+                    <Text style={styles.balanceSectionTitle}>
+                      Today's Activity
+                    </Text>
+                    {dailyStats.hasTodayTransaction && (
+                      <View style={styles.hasTransactionBadge}>
+                        <Icon
+                          name="check-circle"
+                          size={14}
+                          color={theme.colors.success}
+                        />
+                        <Text style={styles.hasTransactionText}>Updated</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.balanceRow}>
+                    <View style={styles.balanceItem}>
+                      <Text style={styles.balanceLabel}>Opening</Text>
+                      <Text style={styles.balanceValue}>
+                        {formatCurrency(metrics.todaysOpening)}
+                      </Text>
+                    </View>
+                    <Icon
+                      name="arrow-forward"
+                      size={24}
+                      color={theme.colors.text.secondary}
+                    />
+                    <View style={styles.balanceItem}>
+                      <Text style={styles.balanceLabel}>Closing</Text>
+                      <Text
+                        style={[
+                          styles.balanceValue,
+                          { color: theme.colors.secondary[500] },
+                        ]}
+                      >
+                        {formatCurrency(metrics.todaysClosing)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Net Change */}
+                <View style={styles.netChangeContainer}>
+                  <View style={styles.netChangeItem}>
+                    <Text style={styles.netChangeLabel}>
+                      Today's Net Change
+                    </Text>
+                    <Text
+                      style={[
+                        styles.netChangeValue,
+                        {
+                          color:
+                            metrics.todaysChange >= 0
+                              ? theme.colors.secondary[500]
+                              : theme.colors.error,
+                        },
+                      ]}
+                    >
+                      {metrics.todaysChange >= 0 ? "+" : ""}
+                      {formatCurrency(metrics.todaysChange)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
 
               {/* Only show if we have agents with balance data */}
-{myAgents.length > 0 && (
-  <View style={styles.modernCard}>
-    <AgentComparisonChart
-       agents={myAgents}  
-      formatCurrency={formatCurrency}
-    />
-  </View>
-)}
+              {myAgents.length > 0 && (
+                <View style={styles.modernCard}>
+                  <AgentComparisonChart
+                    agents={myAgents}
+                    formatCurrency={formatCurrency}
+                  />
+                </View>
+              )}
 
               {/* Recent Activities Section - replaces Quick Actions */}
               {recentActivity && recentActivity.length > 0 && (
@@ -2133,25 +2186,26 @@ const DashboardScreen = () => {
                     <Text style={styles.modernSummaryLabel}>Total Agents</Text>
                   </View>
                   <View style={styles.modernSummaryItem}>
-  <View
-    style={[
-      styles.modernSummaryIcon,
-      { backgroundColor: theme.colors.secondary[500] },
-    ]}
-  >
-    <Icon
-      name="account-balance-wallet"
-      size={24}
-      color={theme.colors.text.inverse}
-    />
-  </View>
-  <Text style={styles.modernSummaryValue}>
-    {formatCurrency(metrics.totalBalance)}  {/* Use metrics.totalBalance instead of dailyStats.closingBalance */}
-  </Text>
-  <Text style={styles.modernSummaryLabel}>
-    Combined Balance
-  </Text>
-</View>
+                    <View
+                      style={[
+                        styles.modernSummaryIcon,
+                        { backgroundColor: theme.colors.secondary[500] },
+                      ]}
+                    >
+                      <Icon
+                        name="account-balance-wallet"
+                        size={24}
+                        color={theme.colors.text.inverse}
+                      />
+                    </View>
+                    <Text style={styles.modernSummaryValue}>
+                      {formatCurrency(metrics.totalBalance)}{" "}
+                      {/* Use metrics.totalBalance instead of dailyStats.closingBalance */}
+                    </Text>
+                    <Text style={styles.modernSummaryLabel}>
+                      Combined Balance
+                    </Text>
+                  </View>
                   <View style={styles.modernSummaryItem}>
                     <View
                       style={[
@@ -2178,114 +2232,131 @@ const DashboardScreen = () => {
                 </View>
               </View>
               {dashboardData.agentsSummary.agents.length > 0 ? (
-                 <FlatList
-                 data={dashboardData.agentsSummary.agents}
-                 renderItem={({ item, index }) => {
-                   // Use latest_balance (which is the closing_balance from most recent transaction)
-                   const latestBalance = parseFloat(item.latest_balance) || 0;
-                   const openingBalance = parseFloat(item.opening_balance) || 0;
-                   const netChange = latestBalance - openingBalance;
-                   
-                   return (
-                     <View style={[styles.modernAgentCard, theme.shadows.medium]}>
-                       <View style={styles.modernAgentHeader}>
-                         <View style={styles.modernAgentInfo}>
-                           <View
-                             style={[
-                               styles.modernAgentAvatar,
-                               {
-                                 backgroundColor:
-                                   index < 3
-                                     ? theme.colors.secondary[500]
-                                     : theme.colors.primary[500],
-                               },
-                             ]}
-                           >
-                             <Text style={styles.modernAgentAvatarText}>
-                               {item.name?.charAt(0)?.toUpperCase() || 'A'}
-                             </Text>
-                           </View>
-                           <View>
-                             <Text style={styles.modernAgentName}>
-                               {item.name || 'Unknown Agent'}
-                             </Text>
-                             <Text style={styles.modernAgentType}>
-                               {item.type || "Agent"}
-                             </Text>
-                             {item.phone && (
-                               <Text style={styles.modernAgentPhone}>
-                                 {item.phone}
-                               </Text>
-                             )}
-                           </View>
-                         </View>
-                         <View
-                           style={[
-                             styles.modernAgentStatus,
-                             { backgroundColor: theme.colors.secondary[500] },
-                           ]}
-                         >
-                           <Text style={styles.modernAgentStatusText}>Active</Text>
-                         </View>
-                       </View>
-                       
-                       <View style={styles.modernAgentMetrics}>
-                         <View style={styles.modernAgentMetric}>
-                           <Text style={styles.modernAgentMetricLabel}>Opening</Text>
-                           <Text style={styles.modernAgentMetricValue}>
-                             {formatCurrency(openingBalance)}
-                           </Text>
-                         </View>
-                         <View style={styles.modernAgentMetric}>
-                           <Text style={styles.modernAgentMetricLabel}>Current</Text>
-                           <Text
-                             style={[
-                               styles.modernAgentMetricValue,
-                               { color: theme.colors.secondary[500] },
-                             ]}
-                           >
-                             {formatCurrency(latestBalance)}
-                           </Text>
-                         </View>
-                         <View style={styles.modernAgentMetric}>
-                           <Text style={styles.modernAgentMetricLabel}>Debtors</Text>
-                           <Text style={styles.modernAgentMetricValue}>
-                             {item.active_debtors || 0}
-                           </Text>
-                         </View>
-                       </View>
-                       
-                       <View style={styles.modernAgentProgress}>
-                         <AgentPerformanceRing 
-                           agent={{
-                             opening_balance: openingBalance,
-                             closing_balance: latestBalance,
-                           }} 
-                           size={60} 
-                         />
-                         <View style={styles.modernAgentNetChange}>
-                           <Text style={styles.modernAgentNetChangeLabel}>Net Change</Text>
-                           <Text
-                             style={[
-                               styles.modernAgentNetChangeValue,
-                               {
-                                 color: netChange >= 0
-                                   ? theme.colors.secondary[500]
-                                   : theme.colors.error,
-                               },
-                             ]}
-                           >
-                             {netChange >= 0 ? "+" : ""}
-                             {formatCurrency(netChange)}
-                           </Text>
-                         </View>
-                       </View>
-                     </View>
-                   );
-                 }}
-                 keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
-                 scrollEnabled={false}
-               />              ) : (
+                <FlatList
+                  data={dashboardData.agentsSummary.agents}
+                  renderItem={({ item, index }) => {
+                    // Use latest_balance (which is the closing_balance from most recent transaction)
+                    const latestBalance = parseFloat(item.latest_balance) || 0;
+                    const openingBalance =
+                      parseFloat(item.opening_balance) || 0;
+                    const netChange = latestBalance - openingBalance;
+
+                    return (
+                      <View
+                        style={[styles.modernAgentCard, theme.shadows.medium]}
+                      >
+                        <View style={styles.modernAgentHeader}>
+                          <View style={styles.modernAgentInfo}>
+                            <View
+                              style={[
+                                styles.modernAgentAvatar,
+                                {
+                                  backgroundColor:
+                                    index < 3
+                                      ? theme.colors.secondary[500]
+                                      : theme.colors.primary[500],
+                                },
+                              ]}
+                            >
+                              <Text style={styles.modernAgentAvatarText}>
+                                {item.name?.charAt(0)?.toUpperCase() || "A"}
+                              </Text>
+                            </View>
+                            <View>
+                              <Text style={styles.modernAgentName}>
+                                {item.name || "Unknown Agent"}
+                              </Text>
+                              <Text style={styles.modernAgentType}>
+                                {item.type || "Agent"}
+                              </Text>
+                              {item.phone && (
+                                <Text style={styles.modernAgentPhone}>
+                                  {item.phone}
+                                </Text>
+                              )}
+                            </View>
+                          </View>
+                          <View
+                            style={[
+                              styles.modernAgentStatus,
+                              { backgroundColor: theme.colors.secondary[500] },
+                            ]}
+                          >
+                            <Text style={styles.modernAgentStatusText}>
+                              Active
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.modernAgentMetrics}>
+                          <View style={styles.modernAgentMetric}>
+                            <Text style={styles.modernAgentMetricLabel}>
+                              Opening
+                            </Text>
+                            <Text style={styles.modernAgentMetricValue}>
+                              {formatCurrency(openingBalance)}
+                            </Text>
+                          </View>
+                          <View style={styles.modernAgentMetric}>
+                            <Text style={styles.modernAgentMetricLabel}>
+                              Current
+                            </Text>
+                            <Text
+                              style={[
+                                styles.modernAgentMetricValue,
+                                { color: theme.colors.secondary[500] },
+                              ]}
+                            >
+                              {formatCurrency(latestBalance)}
+                            </Text>
+                          </View>
+                          <View style={styles.modernAgentMetric}>
+                            <Text style={styles.modernAgentMetricLabel}>
+                              Debtors
+                            </Text>
+                            <Text style={styles.modernAgentMetricValue}>
+                              {item.active_debtors || 0}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.modernAgentProgress}>
+                          <AgentPerformanceRing
+                            agent={{
+                              opening_balance: openingBalance,
+                              closing_balance: latestBalance,
+                            }}
+                            size={60}
+                          />
+                          <View style={styles.modernAgentNetChange}>
+                            <Text style={styles.modernAgentNetChangeLabel}>
+                              Net Change
+                            </Text>
+                            <Text
+                              style={[
+                                styles.modernAgentNetChangeValue,
+                                {
+                                  color:
+                                    netChange >= 0
+                                      ? theme.colors.secondary[500]
+                                      : theme.colors.error,
+                                },
+                              ]}
+                            >
+                              {netChange >= 0 ? "+" : ""}
+                              {formatCurrency(netChange)}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  }}
+                  keyExtractor={(item) =>
+                    item.id?.toString() || Math.random().toString()
+                  }
+                  scrollEnabled={false}
+                />
+              ) : (
                 <View style={styles.modernCard}>
                   <View style={styles.modernEmptyState}>
                     <View
@@ -3085,9 +3156,9 @@ const styles = StyleSheet.create({
     ...theme.shadows.medium,
   },
   cumulativeBalanceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: theme.spacing.xl,
   },
   cumulativeIconContainer: {
@@ -3095,54 +3166,54 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 24,
     backgroundColor: theme.colors.primary[100],
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: theme.spacing.md,
     ...theme.shadows.small,
   },
   cumulativeBalanceTitle: {
     fontSize: 13,
     color: theme.colors.text.primary,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: 1,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   cumulativeBalanceValue: {
     fontSize: 44,
     color: theme.colors.primary[600],
-    textAlign: 'center',
+    textAlign: "center",
     marginVertical: theme.spacing.xl,
-    fontWeight: '900',
+    fontWeight: "900",
     letterSpacing: -1.5,
     textShadowColor: "rgba(124, 58, 237, 0.1)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
   cumulativeStatsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     marginTop: theme.spacing.xl,
     paddingTop: theme.spacing.xl,
     borderTopWidth: 2,
     borderTopColor: theme.colors.primary[200],
   },
   cumulativeStat: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingHorizontal: theme.spacing.xxl,
   },
   cumulativeStatLabel: {
     fontSize: 12,
     color: theme.colors.text.secondary,
     marginBottom: theme.spacing.sm,
-    fontWeight: '600',
-    textTransform: 'uppercase',
+    fontWeight: "600",
+    textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   cumulativeStatValue: {
     fontSize: 18,
     color: theme.colors.text.primary,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   cumulativeStatDivider: {
     width: 2,
@@ -3159,18 +3230,18 @@ const styles = StyleSheet.create({
   balanceSectionTitle: {
     ...theme.typography.bodyMedium,
     color: theme.colors.text.primary,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   todayActivityHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: theme.spacing.lg,
   },
   hasTransactionBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.success + '20',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: theme.colors.success + "20",
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.borderRadius.full,
@@ -3178,30 +3249,30 @@ const styles = StyleSheet.create({
   hasTransactionText: {
     fontSize: 11,
     color: theme.colors.success,
-    fontWeight: '700',
+    fontWeight: "700",
     marginLeft: theme.spacing.xs,
   },
   balanceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
   },
   balanceItem: {
-    alignItems: 'center',
+    alignItems: "center",
     flex: 1,
   },
   balanceLabel: {
     ...theme.typography.captionMedium,
     color: theme.colors.text.secondary,
     marginBottom: theme.spacing.sm,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     letterSpacing: 0.5,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   balanceValue: {
     ...theme.typography.h3,
     color: theme.colors.text.primary,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   netChangeContainer: {
     paddingTop: theme.spacing.xl,
@@ -3209,19 +3280,19 @@ const styles = StyleSheet.create({
     borderTopColor: theme.colors.neutral[200],
   },
   netChangeItem: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   netChangeLabel: {
     ...theme.typography.captionMedium,
     color: theme.colors.text.secondary,
     marginBottom: theme.spacing.sm,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     letterSpacing: 0.5,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   netChangeValue: {
     ...theme.typography.h2,
-    fontWeight: '900',
+    fontWeight: "900",
   },
 
   // ==================== CHART STYLES ====================
@@ -3269,7 +3340,7 @@ const styles = StyleSheet.create({
   modernBarValueTop: {
     marginBottom: theme.spacing.sm,
     minHeight: 32,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   modernBarValueTopText: {
     ...theme.typography.caption,
