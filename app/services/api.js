@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { getUserData } from './auth'; 
 
-const API_URL = 'http://192.168.1.200:3001';
+// const API_URL = 'https://tq-backend-main.fly.dev';
+const API_URL = 'https://tq-backend-main.fly.dev';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -431,7 +432,7 @@ export const deleteCommission = async (commissionId) => {
 // import axios from 'axios';
 // import { getUserData } from './auth'; 
 
-// const API_URL = 'http://192.168.1.200:3001'; // Update with your backend URL
+// const API_URL = 'https://tq-backend-main.fly.dev'; // Update with your backend URL
 
 // const api = axios.create({
 //   baseURL: API_URL,

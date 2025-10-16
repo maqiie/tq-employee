@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.maqiie.tqemployee'
+    namespace 'com.maqiie.userapp'
     defaultConfig {
-        applicationId 'com.maqiie.tqemployee'
+        applicationId 'com.maqiie.userapp'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

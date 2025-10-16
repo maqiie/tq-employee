@@ -37,7 +37,7 @@ const LoginScreen = ({ navigation }) => {
       const { accessToken, client, uid } = await login(email, password);
   
       const validateResponse = await axios.get(
-        "http://192.168.1.200:3001/auth/validate_token",
+        "https://tq-backend-main.fly.dev/auth/validate_token",
         {
           headers: { "access-token": accessToken, client, uid },
         }

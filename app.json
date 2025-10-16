@@ -1,5 +1,26 @@
 {
-  "android": {
-    "package": "com.maqiie.tqemployee"
+  "expo": {
+    "name": "TQ Employee",
+    "slug": "user-app",
+    "version": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/3438c9d3-87ad-4da5-9749-44ecefaad081"
+    },
+    "runtimeVersion": "1.0.0",
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "3438c9d3-87ad-4da5-9749-44ecefaad081"
+      }
+    },
+    "owner": "maqiie",
+    "android": {
+      "package": "com.maqiie.userapp"
+    },
+    "ios": {
+      "bundleIdentifier": "com.maqiie.userapp"
+    }
   }
 }
