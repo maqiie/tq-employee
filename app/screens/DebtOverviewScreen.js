@@ -368,7 +368,7 @@ const fetchAgents = async () => {
     };
 
     const response = await fetch(
-      `${process.env.REACT_APP_API_URL || "https://tq-backend-main.fly.dev "}/employees/agents`,
+      `${process.env.REACT_APP_API_URL || "https://tq-backend-main.fly.dev"}/employees/agents`,
       {
         method: "GET",
         headers: {

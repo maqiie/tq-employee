@@ -2,7 +2,7 @@ import axios from 'axios';
 import { getUserData } from './auth'; 
 
 // const API_URL = 'https://tq-backend-main.fly.dev ';
-const API_URL = 'https://tq-backend-main.fly.dev ';
+const API_URL = 'https://tq-backend-main.fly.dev';
 
 const api = axios.create({
   baseURL: API_URL,
