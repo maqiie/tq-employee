@@ -18,7 +18,7 @@ import { getUserData } from '../services/auth';
 import { getAgents, createAgent, createAgentTransaction } from '../services/api';
 
 const { width: screenWidth } = Dimensions.get('window');
-const API_BASE_URL = 'https://tq-backend-main.fly.dev ';
+const API_BASE_URL = 'https://tq-backend-main.fly.dev';
 
 class AgentsScreen extends Component {
   constructor(props) {

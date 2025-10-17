@@ -170,7 +170,7 @@ const DailyBalanceScreen = ({ navigation, route }) => {
         
         // If agent-specific endpoint fails, try getting all transactions and filtering
         console.log('Agent-specific endpoint failed, trying general transactions endpoint');
-        const allTransactionsResponse = await fetch(`https://tq-backend-main.fly.dev /employees/${employeeId}/transactions`, {
+        const allTransactionsResponse = await fetch(`https://tq-backend-main.fly.dev/employees/${employeeId}/transactions`, {
           method: 'GET',
           headers: headers,
         });
