@@ -123,7 +123,7 @@ const DailyBalanceScreen = ({ navigation, route }) => {
       // Try to get agent-specific transactions using the correct API endpoint
       try {
         // First, try the agent-specific endpoint
-        const response = await fetch(`https://tq-backend-main.fly.dev/employees/agents/${agentId}/transactions`, {
+        const response = await fetch(`https://tq-backend-main.fly.dev /employees/agents/${agentId}/transactions`, {
           method: 'GET',
           headers: headers,
         });
@@ -170,7 +170,7 @@ const DailyBalanceScreen = ({ navigation, route }) => {
         
         // If agent-specific endpoint fails, try getting all transactions and filtering
         console.log('Agent-specific endpoint failed, trying general transactions endpoint');
-        const allTransactionsResponse = await fetch(`https://tq-backend-main.fly.dev/employees/${employeeId}/transactions`, {
+        const allTransactionsResponse = await fetch(`https://tq-backend-main.fly.dev /employees/${employeeId}/transactions`, {
           method: 'GET',
           headers: headers,
         });
