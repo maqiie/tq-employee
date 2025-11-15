@@ -3,6 +3,14 @@
     "name": "TQ Employee",
     "slug": "user-app",
     "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "updates": {
       "url": "https://u.expo.dev/3438c9d3-87ad-4da5-9749-44ecefaad081"
     },
@@ -17,7 +25,11 @@
     },
     "owner": "maqiie",
     "android": {
-      "package": "com.maqiie.userapp"
+      "package": "com.maqiie.userapp",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
     },
     "ios": {
       "bundleIdentifier": "com.maqiie.userapp"

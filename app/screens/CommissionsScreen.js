@@ -38,7 +38,8 @@ const CustomDropdown = ({
   labelKey = "label",
   valueKey = "value",
   disabled = false,
-  zIndex = 1000
+  zIndex = 1000,
+  isAgentDropdown = false  // New prop to identify agent dropdown
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -57,30 +58,62 @@ const CustomDropdown = ({
     <View style={[styles.dropdownContainer, { zIndex }]}>
       <TouchableOpacity
         style={[
-          styles.dropdownButton,
+          isAgentDropdown ? styles.dropdownButtonAgent : styles.dropdownButton,
           disabled && styles.dropdownDisabled,
-          isOpen && styles.dropdownButtonOpen
+          isOpen && (isAgentDropdown ? styles.dropdownButtonAgentOpen : styles.dropdownButtonOpen)
         ]}
         onPress={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         activeOpacity={0.7}
       >
-        <Text style={[
-          styles.dropdownButtonText,
-          !selectedItem && styles.dropdownPlaceholder,
-          disabled && styles.dropdownDisabledText
-        ]}>
-          {selectedItem ? selectedItem[labelKey] : placeholder}
-        </Text>
-        <Icon 
-          name={isOpen ? "keyboard-arrow-up" : "keyboard-arrow-down"} 
-          size={24} 
-          color={disabled ? "#9CA3AF" : isOpen ? "#3B82F6" : "#6B7280"} 
-        />
+        {isAgentDropdown ? (
+          <View style={styles.dropdownButtonContent}>
+            {selectedItem && (
+              <View style={styles.dropdownSelectedIconContainer}>
+                <Icon name="person" size={20} color="#3B82F6" />
+              </View>
+            )}
+            <Text style={[
+              styles.dropdownButtonText,
+              !selectedItem && styles.dropdownPlaceholder,
+              disabled && styles.dropdownDisabledText,
+              selectedItem && { marginLeft: 10 }
+            ]}>
+              {selectedItem ? selectedItem[labelKey] : placeholder}
+            </Text>
+          </View>
+        ) : (
+          <Text style={[
+            styles.dropdownButtonText,
+            !selectedItem && styles.dropdownPlaceholder,
+            disabled && styles.dropdownDisabledText
+          ]}>
+            {selectedItem ? selectedItem[labelKey] : placeholder}
+          </Text>
+        )}
+        
+        {isAgentDropdown ? (
+          <View style={[
+            styles.dropdownArrowContainer,
+            isOpen && styles.dropdownArrowContainerOpen
+          ]}>
+            <Icon 
+              name={isOpen ? "keyboard-arrow-up" : "keyboard-arrow-down"} 
+              size={24} 
+              color={disabled ? "#9CA3AF" : isOpen ? "#FFFFFF" : "#6B7280"} 
+            />
+          </View>
+        ) : (
+          <Icon 
+            name={isOpen ? "keyboard-arrow-up" : "keyboard-arrow-down"} 
+            size={24} 
+            color={disabled ? "#9CA3AF" : isOpen ? "#3B82F6" : "#6B7280"} 
+          />
+        )}
       </TouchableOpacity>
       
       {isOpen && (
-        <View style={styles.dropdownList}>
+        <View style={isAgentDropdown ? styles.dropdownListAgent : styles.dropdownList}>
           <ScrollView 
             style={styles.dropdownScrollView}
             nestedScrollEnabled={true}
@@ -90,23 +123,53 @@ const CustomDropdown = ({
               <TouchableOpacity
                 key={item[valueKey] || index}
                 style={[
-                  styles.dropdownItem,
-                  selectedValue === item[valueKey] && styles.dropdownItemSelected,
+                  isAgentDropdown ? styles.dropdownItemAgent : styles.dropdownItem,
+                  selectedValue === item[valueKey] && (isAgentDropdown ? styles.dropdownItemAgentSelected : styles.dropdownItemSelected),
                   index === data.length - 1 && styles.dropdownItemLast
                 ]}
                 onPress={() => handleSelect(item)}
                 activeOpacity={0.7}
               >
-                <Text style={[
-                  styles.dropdownItemText,
-                  selectedValue === item[valueKey] && styles.dropdownItemTextSelected
-                ]}>
-                  {item[labelKey]}
-                </Text>
-                {selectedValue === item[valueKey] && (
-                  <View style={styles.checkIconContainer}>
-                    <Icon name="check-circle" size={20} color="#3B82F6" />
-                  </View>
+                {isAgentDropdown ? (
+                  <>
+                    <View style={styles.dropdownItemContent}>
+                      <View style={[
+                        styles.dropdownItemIconContainer,
+                        selectedValue === item[valueKey] && styles.dropdownItemIconContainerSelected
+                      ]}>
+                        <Icon 
+                          name="person-outline" 
+                          size={20} 
+                          color={selectedValue === item[valueKey] ? "#3B82F6" : "#9CA3AF"} 
+                        />
+                      </View>
+                      <Text style={[
+                        styles.dropdownItemTextAgent,
+                        selectedValue === item[valueKey] && styles.dropdownItemTextAgentSelected
+                      ]}>
+                        {item[labelKey]}
+                      </Text>
+                    </View>
+                    {selectedValue === item[valueKey] && (
+                      <View style={styles.checkIconContainer}>
+                        <Icon name="check-circle" size={24} color="#3B82F6" />
+                      </View>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Text style={[
+                      styles.dropdownItemText,
+                      selectedValue === item[valueKey] && styles.dropdownItemTextSelected
+                    ]}>
+                      {item[labelKey]}
+                    </Text>
+                    {selectedValue === item[valueKey] && (
+                      <View style={styles.checkIconContainer}>
+                        <Icon name="check-circle" size={20} color="#3B82F6" />
+                      </View>
+                    )}
+                  </>
                 )}
               </TouchableOpacity>
             ))}
@@ -130,13 +193,71 @@ const CommissionScreen = () => {
   const [selectedCommission, setSelectedCommission] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  // Format currency in TSh
+  // Format currency in TSh with commas
   const formatCurrency = (amount) => {
     const numAmount = Number(amount) || 0;
-    return `TSh ${numAmount.toLocaleString('en-TZ', {
+    return `TSh ${numAmount.toLocaleString('en-US', {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     })}`;
+  };
+
+  // Safely format date - handles multiple date formats from API
+  const formatDate = (item) => {
+    // Try different date fields that might come from the API
+    const dateValue = item.date || item.created_at || item.updated_at;
+    
+    if (!dateValue) {
+      // If no date is available, construct from month/year
+      if (item.month && item.year) {
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        return `${monthNames[item.month - 1]} ${item.year}`;
+      }
+      return "Date not available";
+    }
+
+    try {
+      const date = new Date(dateValue);
+      
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        // If date is invalid, try to construct from month/year
+        if (item.month && item.year) {
+          const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+          return `${monthNames[item.month - 1]} ${item.year}`;
+        }
+        return "Date not available";
+      }
+
+      return date.toLocaleDateString("en-US", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch (error) {
+      console.error("Error formatting date:", error);
+      return "Date not available";
+    }
+  };
+
+  // Format number input with commas as user types
+  const formatNumberWithCommas = (value) => {
+    // Remove all non-digit characters
+    const numericValue = value.replace(/[^\d]/g, '');
+    
+    // Format with commas
+    if (numericValue === '') return '';
+    
+    return Number(numericValue).toLocaleString('en-US');
+  };
+
+  // Handle amount input change
+  const handleAmountChange = (text) => {
+    // Remove all non-digit characters to get the raw number
+    const numericValue = text.replace(/[^\d]/g, '');
+    
+    // Store the raw numeric value (without commas)
+    setAmount(numericValue);
   };
 
   useEffect(() => {
@@ -202,6 +323,18 @@ const CommissionScreen = () => {
       const commissionsData = response?.data || response?.commissions || response || [];
       
       console.log("Processed commissions data:", commissionsData);
+      
+      // Log date information for debugging
+      if (commissionsData.length > 0) {
+        console.log("First commission date fields:", {
+          date: commissionsData[0].date,
+          created_at: commissionsData[0].created_at,
+          updated_at: commissionsData[0].updated_at,
+          month: commissionsData[0].month,
+          year: commissionsData[0].year
+        });
+      }
+      
       setCommissions(Array.isArray(commissionsData) ? commissionsData : []);
     } catch (error) {
       console.error("Error fetching commissions:", error);
@@ -287,11 +420,7 @@ const CommissionScreen = () => {
                 <View style={styles.dateContainer}>
                   <Icon name="schedule" size={14} color="#8B9DC3" />
                   <Text style={styles.date}>
-                    {new Date(item.date || item.created_at).toLocaleDateString("en-US", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
+                    {formatDate(item)}
                   </Text>
                 </View>
               </View>
@@ -371,7 +500,7 @@ const CommissionScreen = () => {
                 <View style={styles.modalRowContent}>
                   <Text style={styles.modalLabel}>Date</Text>
                   <Text style={styles.modalValue}>
-                    {new Date(commission.date || commission.created_at).toLocaleDateString()}
+                    {formatDate(commission)}
                   </Text>
                 </View>
               </View>
@@ -405,11 +534,11 @@ const CommissionScreen = () => {
     value: agent.id
   }));
 
-  // Calculate total commissions - FIX FOR "Total This Period"
+  // Calculate total commissions with proper formatting
   const totalCommissions = commissions && Array.isArray(commissions) && commissions.length > 0
     ? commissions.reduce((sum, item) => {
         const itemAmount = Number(item.amount) || 0;
-        console.log(`Adding commission amount: ${itemAmount}`);
+        console.log("Adding commission amount:", itemAmount);
         return sum + itemAmount;
       }, 0)
     : 0;
@@ -516,7 +645,7 @@ const CommissionScreen = () => {
             <Text style={styles.sectionTitle}>Add New Commission</Text>
           </View>
 
-          <View style={styles.inputGroup}>
+          <View style={[styles.inputGroup, { zIndex: 1000 }]}>
             <Text style={styles.inputLabel}>Select Agent</Text>
             <CustomDropdown
               data={agentOptions}
@@ -525,10 +654,11 @@ const CommissionScreen = () => {
               placeholder={agents.length > 0 ? "Choose an agent..." : "Loading agents..."}
               disabled={agents.length === 0}
               zIndex={1000}
+              isAgentDropdown={true}
             />
           </View>
 
-          <View style={styles.inputGroup}>
+          <View style={[styles.inputGroup, { zIndex: 1 }]}>
             <Text style={styles.inputLabel}>Amount (TSh)</Text>
             <View style={styles.inputWrapper}>
               <LinearGradient
@@ -539,8 +669,8 @@ const CommissionScreen = () => {
               </LinearGradient>
               <TextInput
                 style={styles.input}
-                onChangeText={setAmount}
-                value={amount}
+                onChangeText={handleAmountChange}
+                value={formatNumberWithCommas(amount)}
                 placeholder="Enter amount in TSh"
                 keyboardType="numeric"
                 placeholderTextColor="#9CA3AF"
@@ -548,7 +678,7 @@ const CommissionScreen = () => {
             </View>
           </View>
 
-          <View style={styles.inputGroup}>
+          <View style={[styles.inputGroup, { zIndex: 1 }]}>
             <Text style={styles.inputLabel}>Description (Optional)</Text>
             <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
               <LinearGradient
@@ -834,6 +964,7 @@ const styles = StyleSheet.create({
   dropdownContainer: {
     position: 'relative',
   },
+  // Original simple dropdown styles (for Month/Year)
   dropdownButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -852,9 +983,71 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
   },
+  // Enhanced agent dropdown styles
+  dropdownButtonAgent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 18,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    minHeight: 64,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  dropdownButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  dropdownSelectedIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#DBEAFE',
+  },
+  dropdownArrowContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  dropdownArrowContainerOpen: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+    transform: [{ scale: 1.05 }],
+  },
+  dropdownButtonAgentOpen: {
+    borderColor: '#3B82F6',
+    backgroundColor: '#FAFBFF',
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 12,
+    borderWidth: 2,
+  },
   dropdownDisabled: {
     backgroundColor: '#F3F4F6',
     borderColor: '#E5E7EB',
+    opacity: 0.6,
   },
   dropdownButtonText: {
     fontSize: 16,
@@ -868,6 +1061,7 @@ const styles = StyleSheet.create({
   dropdownDisabledText: {
     color: '#9CA3AF',
   },
+  // Original simple dropdown list (for Month/Year)
   dropdownList: {
     position: 'absolute',
     top: 52,
@@ -887,9 +1081,31 @@ const styles = StyleSheet.create({
     elevation: 20,
     zIndex: 9999,
   },
-  dropdownScrollView: {
-    maxHeight: 240,
+  // Enhanced agent dropdown list
+  dropdownListAgent: {
+    position: 'absolute',
+    top: 62,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#3B82F6',
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    maxHeight: 320,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.3,
+    shadowRadius: 30,
+    elevation: 30,
+    zIndex: 9999,
+    overflow: 'hidden',
   },
+  dropdownScrollView: {
+    maxHeight: 280,
+  },
+  // Original simple dropdown item (for Month/Year)
   dropdownItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -899,9 +1115,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
     backgroundColor: '#FFFFFF',
-  },
-  dropdownItemLast: {
-    borderBottomWidth: 0,
   },
   dropdownItemSelected: {
     backgroundColor: '#EFF6FF',
@@ -915,13 +1128,73 @@ const styles = StyleSheet.create({
     color: '#3B82F6',
     fontWeight: '600',
   },
-  checkIconContainer: {
-    marginLeft: 8,
+  // Enhanced agent dropdown item
+  dropdownItemAgent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    backgroundColor: '#FFFFFF',
+    minHeight: 64,
   },
-
+  dropdownItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  dropdownItemIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  dropdownItemIconContainerSelected: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#DBEAFE',
+    borderWidth: 2,
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  dropdownItemAgentSelected: {
+    backgroundColor: '#F0F9FF',
+    borderLeftWidth: 5,
+    borderLeftColor: '#3B82F6',
+    borderBottomColor: '#DBEAFE',
+  },
+  dropdownItemTextAgent: {
+    fontSize: 17,
+    color: '#374151',
+    flex: 1,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  dropdownItemTextAgentSelected: {
+    color: '#2563EB',
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  checkIconContainer: {
+    marginLeft: 12,
+    backgroundColor: '#DBEAFE',
+    borderRadius: 24,
+    padding: 6,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
   inputGroup: {
     marginBottom: 24,
-    zIndex: 1,
   },
   inputLabel: {
     fontSize: 14,
@@ -1238,3 +1511,1244 @@ const styles = StyleSheet.create({
 });
 
 export default CommissionScreen;
+
+// import React, { useState, useEffect } from "react";
+// import {
+//   View,
+//   Text,
+//   TextInput,
+//   TouchableOpacity,
+//   StyleSheet,
+//   FlatList,
+//   ActivityIndicator,
+//   Alert,
+//   ScrollView,
+//   SafeAreaView,
+//   StatusBar,
+//   Dimensions,
+//   Modal,
+//   Platform,
+// } from "react-native";
+// import Icon from "react-native-vector-icons/MaterialIcons";
+// import { LinearGradient } from "expo-linear-gradient";
+// import {
+//   getCommissions,
+//   createCommission,
+//   getCommission,
+//   updateCommission,
+//   deleteCommission,
+//   getAgents,
+// } from "../services/api";
+// import { getUserData } from "../services/auth";
+
+// const { width } = Dimensions.get("window");
+
+// // Custom Dropdown Component
+// const CustomDropdown = ({ 
+//   data, 
+//   selectedValue, 
+//   onValueChange, 
+//   placeholder = "Select an option",
+//   labelKey = "label",
+//   valueKey = "value",
+//   disabled = false,
+//   zIndex = 1000
+// }) => {
+//   const [isOpen, setIsOpen] = useState(false);
+//   const [selectedItem, setSelectedItem] = useState(null);
+
+//   useEffect(() => {
+//     const item = data.find(d => d[valueKey] === selectedValue);
+//     setSelectedItem(item);
+//   }, [selectedValue, data, valueKey]);
+
+//   const handleSelect = (item) => {
+//     onValueChange(item[valueKey]);
+//     setIsOpen(false);
+//   };
+
+//   return (
+//     <View style={[styles.dropdownContainer, { zIndex }]}>
+//       <TouchableOpacity
+//         style={[
+//           styles.dropdownButton,
+//           disabled && styles.dropdownDisabled,
+//           isOpen && styles.dropdownButtonOpen
+//         ]}
+//         onPress={() => !disabled && setIsOpen(!isOpen)}
+//         disabled={disabled}
+//         activeOpacity={0.7}
+//       >
+//         <Text style={[
+//           styles.dropdownButtonText,
+//           !selectedItem && styles.dropdownPlaceholder,
+//           disabled && styles.dropdownDisabledText
+//         ]}>
+//           {selectedItem ? selectedItem[labelKey] : placeholder}
+//         </Text>
+//         <Icon 
+//           name={isOpen ? "keyboard-arrow-up" : "keyboard-arrow-down"} 
+//           size={24} 
+//           color={disabled ? "#9CA3AF" : isOpen ? "#3B82F6" : "#6B7280"} 
+//         />
+//       </TouchableOpacity>
+      
+//       {isOpen && (
+//         <View style={styles.dropdownList}>
+//           <ScrollView 
+//             style={styles.dropdownScrollView}
+//             nestedScrollEnabled={true}
+//             showsVerticalScrollIndicator={false}
+//           >
+//             {data.map((item, index) => (
+//               <TouchableOpacity
+//                 key={item[valueKey] || index}
+//                 style={[
+//                   styles.dropdownItem,
+//                   selectedValue === item[valueKey] && styles.dropdownItemSelected,
+//                   index === data.length - 1 && styles.dropdownItemLast
+//                 ]}
+//                 onPress={() => handleSelect(item)}
+//                 activeOpacity={0.7}
+//               >
+//                 <Text style={[
+//                   styles.dropdownItemText,
+//                   selectedValue === item[valueKey] && styles.dropdownItemTextSelected
+//                 ]}>
+//                   {item[labelKey]}
+//                 </Text>
+//                 {selectedValue === item[valueKey] && (
+//                   <View style={styles.checkIconContainer}>
+//                     <Icon name="check-circle" size={20} color="#3B82F6" />
+//                   </View>
+//                 )}
+//               </TouchableOpacity>
+//             ))}
+//           </ScrollView>
+//         </View>
+//       )}
+//     </View>
+//   );
+// };
+
+// const CommissionScreen = () => {
+//   const [amount, setAmount] = useState("");
+//   const [agentId, setAgentId] = useState("");
+//   const [description, setDescription] = useState("");
+//   const [commissions, setCommissions] = useState([]);
+//   const [loading, setLoading] = useState(true);
+//   const [agents, setAgents] = useState([]);
+//   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+//   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+//   const [userData, setUserData] = useState(null);
+//   const [selectedCommission, setSelectedCommission] = useState(null);
+//   const [modalVisible, setModalVisible] = useState(false);
+
+//   // Format currency in TSh
+//   const formatCurrency = (amount) => {
+//     const numAmount = Number(amount) || 0;
+//     return `TSh ${numAmount.toLocaleString('en-TZ', {
+//       minimumFractionDigits: 0,
+//       maximumFractionDigits: 0,
+//     })}`;
+//   };
+
+//   useEffect(() => {
+//     const fetchUserData = async () => {
+//       try {
+//         const data = await getUserData();
+//         setUserData(data);
+//       } catch (error) {
+//         console.error('Error fetching user data:', error);
+//         Alert.alert("Error", "Failed to fetch user data.");
+//       }
+//     };
+//     fetchUserData();
+//   }, []);
+
+//   useEffect(() => {
+//     fetchAgents();
+//   }, []);
+
+//   useEffect(() => {
+//     fetchCommissions();
+//   }, [selectedMonth, selectedYear]);
+
+//   const fetchAgents = async () => {
+//     try {
+//       const userData = await getUserData();
+//       if (!userData.userToken || !userData.client || !userData.uid) {
+//         throw new Error("Missing authentication headers");
+//       }
+  
+//       const headers = {
+//         'access-token': userData.userToken,
+//         client: userData.client,
+//         uid: userData.uid,
+//       };
+  
+//       const response = await getAgents(headers);
+//       console.log("Agents API Response:", response);
+  
+//       const agentsData = response || [];
+//       setAgents(agentsData);
+  
+//       if (agentsData.length > 0) {
+//         setAgentId(agentsData[0].id);
+//       }
+//     } catch (error) {
+//       console.error("Error fetching agents:", error);
+//       Alert.alert("Error", "Failed to load agents.");
+//     }
+//   };
+  
+//   const fetchCommissions = async () => {
+//     setLoading(true);
+//     try {
+//       const response = await getCommissions({
+//         month: selectedMonth,
+//         year: selectedYear,
+//       });
+      
+//       console.log("Commissions API Response:", response);
+      
+//       // Handle different response structures
+//       const commissionsData = response?.data || response?.commissions || response || [];
+      
+//       console.log("Processed commissions data:", commissionsData);
+//       setCommissions(Array.isArray(commissionsData) ? commissionsData : []);
+//     } catch (error) {
+//       console.error("Error fetching commissions:", error);
+//       Alert.alert("Error", "Failed to load commissions.");
+//       setCommissions([]);
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
+
+//   const addCommission = async () => {
+//     console.log("Starting addCommission function");
+    
+//     if (!amount || isNaN(amount) || !agentId) {
+//       console.log("Validation failed: amount or agentId is missing or invalid");
+//       Alert.alert("Error", "Please enter a valid amount and select an agent.");
+//       return;
+//     }
+
+//     try {
+//       console.log("Selected Agent ID:", agentId);
+//       const agentExists = agents.some(agent => agent.id === agentId);
+      
+//       if (!agentExists) {
+//         console.log("Agent does not exist with ID:", agentId);
+//         Alert.alert("Error", "Selected agent does not exist.");
+//         return;
+//       }
+
+//       const commissionPayload = {
+//         agent_id: agentId,
+//         amount: parseFloat(amount),
+//         month: selectedMonth,
+//         year: selectedYear,
+//         description: description,
+//       };
+
+//       console.log("Creating commission with data:", commissionPayload);
+//       const response = await createCommission(commissionPayload);
+//       console.log("Commission created successfully:", response);
+      
+//       Alert.alert("Success", "Commission added successfully.");
+//       setAmount("");
+//       setDescription("");
+//       fetchCommissions();
+//     } catch (error) {
+//       console.error("Error adding commission:", error.response?.data || error.message);
+//       Alert.alert("Error", "Failed to add commission. Please check the console for more details.");
+//     }
+//   };
+
+//   const renderCommissionItem = ({ item, index }) => {
+//     const amountValue = Number(item.amount) || 0;
+    
+//     return (
+//       <TouchableOpacity 
+//         onPress={() => {
+//           setSelectedCommission(item);
+//           setModalVisible(true);
+//         }}
+//         activeOpacity={0.7}
+//       >
+//         <View style={[styles.commissionCard, { marginTop: index === 0 ? 0 : 16 }]}>
+//           <View style={styles.commissionContent}>
+//             <View style={styles.commissionLeft}>
+//               <LinearGradient
+//                 colors={['#3B82F6', '#1D4ED8']}
+//                 style={styles.agentAvatar}
+//               >
+//                 <Text style={styles.agentInitial}>
+//                   {item.agent_name ? item.agent_name.charAt(0).toUpperCase() : "A"}
+//                 </Text>
+//               </LinearGradient>
+//               <View style={styles.commissionInfo}>
+//                 <Text style={styles.agentName}>
+//                   {item.agent_name || "Unknown Agent"}
+//                 </Text>
+//                 {item.description && (
+//                   <Text style={styles.description} numberOfLines={2}>
+//                     {item.description}
+//                   </Text>
+//                 )}
+//                 <View style={styles.dateContainer}>
+//                   <Icon name="schedule" size={14} color="#8B9DC3" />
+//                   <Text style={styles.date}>
+//                     {new Date(item.date || item.created_at).toLocaleDateString("en-US", {
+//                       day: "numeric",
+//                       month: "short",
+//                       year: "numeric",
+//                     })}
+//                   </Text>
+//                 </View>
+//               </View>
+//             </View>
+//             <View style={styles.amountContainer}>
+//               <Text style={styles.amount}>{formatCurrency(amountValue)}</Text>
+//               <View style={styles.amountBadge}>
+//                 <Icon name="trending-up" size={16} color="#10B981" />
+//               </View>
+//             </View>
+//           </View>
+//         </View>
+//       </TouchableOpacity>
+//     );
+//   };
+
+//   const CommissionDetailsModal = ({ commission, visible, onClose }) => {
+//     if (!visible || !commission) return null;
+
+//     const amountValue = Number(commission.amount) || 0;
+
+//     return (
+//       <Modal
+//         animationType="slide"
+//         transparent={true}
+//         visible={visible}
+//         onRequestClose={onClose}
+//       >
+//         <View style={styles.modalContainer}>
+//           <View style={styles.modalContent}>
+//             <View style={styles.modalHeader}>
+//               <Text style={styles.modalTitle}>Commission Details</Text>
+//               <TouchableOpacity onPress={onClose} style={styles.closeIcon}>
+//                 <Icon name="close" size={24} color="#6B7280" />
+//               </TouchableOpacity>
+//             </View>
+            
+//             <View style={styles.modalBody}>
+//               <View style={styles.modalRow}>
+//                 <View style={styles.modalIconContainer}>
+//                   <Icon name="person" size={20} color="#3B82F6" />
+//                 </View>
+//                 <View style={styles.modalRowContent}>
+//                   <Text style={styles.modalLabel}>Agent</Text>
+//                   <Text style={styles.modalValue}>{commission.agent_name || "Unknown Agent"}</Text>
+//                 </View>
+//               </View>
+              
+//               <View style={styles.modalRow}>
+//                 <View style={styles.modalIconContainer}>
+//                   <Icon name="attach-money" size={20} color="#10B981" />
+//                 </View>
+//                 <View style={styles.modalRowContent}>
+//                   <Text style={styles.modalLabel}>Amount</Text>
+//                   <Text style={[styles.modalValue, styles.modalAmount]}>
+//                     {formatCurrency(amountValue)}
+//                   </Text>
+//                 </View>
+//               </View>
+              
+//               <View style={styles.modalRow}>
+//                 <View style={styles.modalIconContainer}>
+//                   <Icon name="description" size={20} color="#8B5CF6" />
+//                 </View>
+//                 <View style={styles.modalRowContent}>
+//                   <Text style={styles.modalLabel}>Description</Text>
+//                   <Text style={styles.modalValue}>
+//                     {commission.description || "No description"}
+//                   </Text>
+//                 </View>
+//               </View>
+              
+//               <View style={styles.modalRow}>
+//                 <View style={styles.modalIconContainer}>
+//                   <Icon name="schedule" size={20} color="#F59E0B" />
+//                 </View>
+//                 <View style={styles.modalRowContent}>
+//                   <Text style={styles.modalLabel}>Date</Text>
+//                   <Text style={styles.modalValue}>
+//                     {new Date(commission.date || commission.created_at).toLocaleDateString()}
+//                   </Text>
+//                 </View>
+//               </View>
+//             </View>
+
+//             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+//               <LinearGradient colors={['#3B82F6', '#1D4ED8']} style={styles.closeButtonGradient}>
+//                 <Text style={styles.closeButtonText}>Close</Text>
+//               </LinearGradient>
+//             </TouchableOpacity>
+//           </View>
+//         </View>
+//       </Modal>
+//     );
+//   };
+
+//   // Prepare dropdown data
+//   const monthOptions = Array.from({ length: 12 }, (_, i) => ({
+//     label: new Date(2000, i, 1).toLocaleString("default", { month: "long" }),
+//     value: i + 1
+//   }));
+
+//   const currentYear = new Date().getFullYear();
+//   const yearOptions = Array.from({ length: 5 }, (_, i) => ({
+//     label: (currentYear - i).toString(),
+//     value: currentYear - i
+//   }));
+
+//   const agentOptions = agents.map(agent => ({
+//     label: agent.name,
+//     value: agent.id
+//   }));
+
+//   // Calculate total commissions - FIX FOR "Total This Period"
+//   const totalCommissions = commissions && Array.isArray(commissions) && commissions.length > 0
+//     ? commissions.reduce((sum, item) => {
+//         const itemAmount = Number(item.amount) || 0;
+//         console.log(`Adding commission amount: ${itemAmount}`);
+//         return sum + itemAmount;
+//       }, 0)
+//     : 0;
+  
+//   console.log("Total commissions calculated:", totalCommissions);
+//   const totalCommissionsValue = Number(totalCommissions) || 0;
+
+//   return (
+//     <SafeAreaView style={styles.container}>
+//       <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
+      
+//       <LinearGradient colors={["#0F172A", "#1E293B", "#334155"]} style={styles.header}>
+//         <View style={styles.headerContent}>
+//           <View style={styles.headerIconWrapper}>
+//             <LinearGradient
+//               colors={['#10B981', '#059669']}
+//               style={styles.headerIcon}
+//             >
+//               <Icon name="monetization-on" size={32} color="#FFFFFF" />
+//             </LinearGradient>
+//           </View>
+//           <Text style={styles.title}>Commissions</Text>
+//           <Text style={styles.subtitle}>Manage agent commissions efficiently</Text>
+//         </View>
+//       </LinearGradient>
+
+//       <ScrollView
+//         style={styles.scrollView}
+//         showsVerticalScrollIndicator={false}
+//         contentContainerStyle={styles.scrollViewContent}
+//       >
+//         <LinearGradient
+//           colors={['#FFFFFF', '#F8FAFC']}
+//           style={styles.statsCard}
+//         >
+//           <View style={styles.statItem}>
+//             <LinearGradient
+//               colors={['#10B981', '#059669']}
+//               style={styles.statIconContainer}
+//             >
+//               <Icon name="trending-up" size={24} color="#FFFFFF" />
+//             </LinearGradient>
+//             <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+//               {formatCurrency(totalCommissionsValue)}
+//             </Text>
+//             <Text style={styles.statLabel}>Total This Period</Text>
+//           </View>
+//           <View style={styles.statDivider} />
+//           <View style={styles.statItem}>
+//             <LinearGradient
+//               colors={['#3B82F6', '#1D4ED8']}
+//               style={styles.statIconContainer}
+//             >
+//               <Icon name="assignment" size={24} color="#FFFFFF" />
+//             </LinearGradient>
+//             <Text style={styles.statValue}>{commissions.length}</Text>
+//             <Text style={styles.statLabel}>Commissions</Text>
+//           </View>
+//         </LinearGradient>
+
+//         <View style={styles.filterSection}>
+//           <View style={styles.sectionHeader}>
+//             <LinearGradient
+//               colors={['#8B5CF6', '#7C3AED']}
+//               style={styles.sectionIcon}
+//             >
+//               <Icon name="filter-list" size={20} color="#FFFFFF" />
+//             </LinearGradient>
+//             <Text style={styles.sectionTitle}>Filter Period</Text>
+//           </View>
+          
+//           <View style={styles.filterContainer}>
+//             <View style={styles.filterItem}>
+//               <Text style={styles.filterLabel}>Month</Text>
+//               <CustomDropdown
+//                 data={monthOptions}
+//                 selectedValue={selectedMonth}
+//                 onValueChange={setSelectedMonth}
+//                 placeholder="Select Month"
+//                 zIndex={3000}
+//               />
+//             </View>
+//             <View style={styles.filterItem}>
+//               <Text style={styles.filterLabel}>Year</Text>
+//               <CustomDropdown
+//                 data={yearOptions}
+//                 selectedValue={selectedYear}
+//                 onValueChange={setSelectedYear}
+//                 placeholder="Select Year"
+//                 zIndex={2000}
+//               />
+//             </View>
+//           </View>
+//         </View>
+
+//         <View style={styles.formSection}>
+//           <View style={styles.sectionHeader}>
+//             <LinearGradient
+//               colors={['#10B981', '#059669']}
+//               style={styles.sectionIcon}
+//             >
+//               <Icon name="add-circle-outline" size={20} color="#FFFFFF" />
+//             </LinearGradient>
+//             <Text style={styles.sectionTitle}>Add New Commission</Text>
+//           </View>
+
+//           <View style={styles.inputGroup}>
+//             <Text style={styles.inputLabel}>Select Agent</Text>
+//             <CustomDropdown
+//               data={agentOptions}
+//               selectedValue={agentId}
+//               onValueChange={setAgentId}
+//               placeholder={agents.length > 0 ? "Choose an agent..." : "Loading agents..."}
+//               disabled={agents.length === 0}
+//               zIndex={1000}
+//             />
+//           </View>
+
+//           <View style={styles.inputGroup}>
+//             <Text style={styles.inputLabel}>Amount (TSh)</Text>
+//             <View style={styles.inputWrapper}>
+//               <LinearGradient
+//                 colors={['#10B981', '#059669']}
+//                 style={styles.inputIconContainer}
+//               >
+//                 <Icon name="attach-money" size={20} color="#FFFFFF" />
+//               </LinearGradient>
+//               <TextInput
+//                 style={styles.input}
+//                 onChangeText={setAmount}
+//                 value={amount}
+//                 placeholder="Enter amount in TSh"
+//                 keyboardType="numeric"
+//                 placeholderTextColor="#9CA3AF"
+//               />
+//             </View>
+//           </View>
+
+//           <View style={styles.inputGroup}>
+//             <Text style={styles.inputLabel}>Description (Optional)</Text>
+//             <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
+//               <LinearGradient
+//                 colors={['#8B5CF6', '#7C3AED']}
+//                 style={[styles.inputIconContainer, styles.textAreaIcon]}
+//               >
+//                 <Icon name="description" size={20} color="#FFFFFF" />
+//               </LinearGradient>
+//               <TextInput
+//                 style={[styles.input, styles.textArea]}
+//                 onChangeText={setDescription}
+//                 value={description}
+//                 placeholder="Add commission details..."
+//                 multiline
+//                 numberOfLines={3}
+//                 textAlignVertical="top"
+//                 placeholderTextColor="#9CA3AF"
+//               />
+//             </View>
+//           </View>
+
+//           <TouchableOpacity
+//             style={[
+//               styles.addButton,
+//               (!amount || !agentId) && styles.addButtonDisabled,
+//             ]}
+//             onPress={addCommission}
+//             disabled={!amount || !agentId}
+//             activeOpacity={0.8}
+//           >
+//             <LinearGradient
+//               colors={
+//                 !amount || !agentId
+//                   ? ["#9CA3AF", "#6B7280"]
+//                   : ["#3B82F6", "#1D4ED8"]
+//               }
+//               style={styles.addButtonGradient}
+//             >
+//               <Icon
+//                 name="add"
+//                 size={20}
+//                 color="#FFFFFF"
+//                 style={styles.addButtonIcon}
+//               />
+//               <Text style={styles.addButtonText}>Add Commission</Text>
+//             </LinearGradient>
+//           </TouchableOpacity>
+//         </View>
+
+//         <View style={styles.listSection}>
+//           <View style={styles.sectionHeader}>
+//             <LinearGradient
+//               colors={['#F59E0B', '#D97706']}
+//               style={styles.sectionIcon}
+//             >
+//               <Icon name="list" size={20} color="#FFFFFF" />
+//             </LinearGradient>
+//             <Text style={styles.sectionTitle}>
+//               {new Date(selectedYear, selectedMonth - 1, 1).toLocaleString(
+//                 "default",
+//                 {
+//                   month: "long",
+//                   year: "numeric",
+//                 }
+//               )}{" "}
+//               Commissions
+//             </Text>
+//           </View>
+
+//           {loading ? (
+//             <View style={styles.loadingContainer}>
+//               <ActivityIndicator size="large" color="#3B82F6" />
+//               <Text style={styles.loadingText}>Loading commissions...</Text>
+//             </View>
+//           ) : !commissions || commissions.length === 0 ? (
+//             <View style={styles.emptyContainer}>
+//               <LinearGradient
+//                 colors={['#F3F4F6', '#E5E7EB']}
+//                 style={styles.emptyIconContainer}
+//               >
+//                 <Icon name="inbox" size={48} color="#9CA3AF" />
+//               </LinearGradient>
+//               <Text style={styles.emptyTitle}>No Commissions Found</Text>
+//               <Text style={styles.emptyText}>
+//                 No commissions recorded for this period. Add your first
+//                 commission above to get started.
+//               </Text>
+//             </View>
+//           ) : (
+//             <FlatList
+//               data={commissions}
+//               renderItem={renderCommissionItem}
+//               keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+//               scrollEnabled={false}
+//               contentContainerStyle={styles.listContainer}
+//             />
+//           )}
+//         </View>
+//       </ScrollView>
+
+//       <CommissionDetailsModal
+//         commission={selectedCommission}
+//         visible={modalVisible}
+//         onClose={() => setModalVisible(false)}
+//       />
+//     </SafeAreaView>
+//   );
+// };
+
+// const styles = StyleSheet.create({
+//   container: {
+//     flex: 1,
+//     backgroundColor: "#F1F5F9",
+//   },
+//   header: {
+//     paddingTop: Platform.OS === 'ios' ? 20 : 40,
+//     paddingBottom: 40,
+//     paddingHorizontal: 20,
+//   },
+//   headerContent: {
+//     alignItems: "center",
+//   },
+//   headerIconWrapper: {
+//     marginBottom: 12,
+//   },
+//   headerIcon: {
+//     width: 64,
+//     height: 64,
+//     borderRadius: 32,
+//     alignItems: "center",
+//     justifyContent: "center",
+//     shadowColor: "#10B981",
+//     shadowOffset: { width: 0, height: 4 },
+//     shadowOpacity: 0.3,
+//     shadowRadius: 12,
+//     elevation: 8,
+//   },
+//   title: {
+//     fontSize: 32,
+//     fontWeight: "bold",
+//     color: "#FFFFFF",
+//     marginBottom: 8,
+//     textAlign: "center",
+//   },
+//   subtitle: {
+//     fontSize: 16,
+//     color: "#CBD5E1",
+//     opacity: 0.9,
+//     textAlign: "center",
+//   },
+//   scrollView: {
+//     flex: 1,
+//     marginTop: -20,
+//     borderTopLeftRadius: 24,
+//     borderTopRightRadius: 24,
+//     backgroundColor: "#F1F5F9",
+//   },
+//   scrollViewContent: {
+//     paddingBottom: 40,
+//   },
+//   statsCard: {
+//     marginHorizontal: 20,
+//     marginTop: 24,
+//     borderRadius: 20,
+//     padding: 28,
+//     flexDirection: "row",
+//     alignItems: "center",
+//     shadowColor: "#000",
+//     shadowOffset: { width: 0, height: 8 },
+//     shadowOpacity: 0.15,
+//     shadowRadius: 20,
+//     elevation: 12,
+//     zIndex: 1,
+//   },
+//   statItem: {
+//     flex: 1,
+//     alignItems: "center",
+//   },
+//   statIconContainer: {
+//     width: 48,
+//     height: 48,
+//     borderRadius: 24,
+//     alignItems: "center",
+//     justifyContent: "center",
+//     marginBottom: 12,
+//     shadowColor: "#000",
+//     shadowOffset: { width: 0, height: 2 },
+//     shadowOpacity: 0.1,
+//     shadowRadius: 4,
+//     elevation: 4,
+//   },
+//   statValue: {
+//     fontSize: 20,
+//     fontWeight: "bold",
+//     color: "#1F2937",
+//     marginBottom: 4,
+//     textAlign: "center",
+//   },
+//   statLabel: {
+//     fontSize: 14,
+//     color: "#6B7280",
+//     fontWeight: "600",
+//     textAlign: "center",
+//   },
+//   statDivider: {
+//     width: 1,
+//     height: 60,
+//     backgroundColor: "#E5E7EB",
+//     marginHorizontal: 24,
+//   },
+//   filterSection: {
+//     margin: 20,
+//     backgroundColor: "#FFFFFF",
+//     borderRadius: 20,
+//     padding: 24,
+//     shadowColor: "#000",
+//     shadowOffset: { width: 0, height: 4 },
+//     shadowOpacity: 0.1,
+//     shadowRadius: 12,
+//     elevation: 8,
+//     overflow: 'visible',
+//     zIndex: 100,
+//   },
+//   formSection: {
+//     margin: 20,
+//     marginTop: 0,
+//     backgroundColor: "#FFFFFF",
+//     borderRadius: 20,
+//     padding: 24,
+//     shadowColor: "#000",
+//     shadowOffset: { width: 0, height: 4 },
+//     shadowOpacity: 0.1,
+//     shadowRadius: 12,
+//     elevation: 8,
+//     overflow: 'visible',
+//     zIndex: 10,
+//   },
+//   listSection: {
+//     margin: 20,
+//     marginTop: 0,
+//     zIndex: 1,
+//   },
+//   sectionHeader: {
+//     flexDirection: "row",
+//     alignItems: "center",
+//     marginBottom: 20,
+//     zIndex: 1,
+//   },
+//   sectionIcon: {
+//     width: 36,
+//     height: 36,
+//     borderRadius: 18,
+//     alignItems: "center",
+//     justifyContent: "center",
+//     marginRight: 12,
+//     shadowColor: "#000",
+//     shadowOffset: { width: 0, height: 2 },
+//     shadowOpacity: 0.1,
+//     shadowRadius: 4,
+//     elevation: 4,
+//   },
+//   sectionTitle: {
+//     fontSize: 20,
+//     fontWeight: "bold",
+//     color: "#1F2937",
+//   },
+//   filterContainer: {
+//     flexDirection: "row",
+//     gap: 16,
+//     zIndex: 100,
+//   },
+//   filterItem: {
+//     flex: 1,
+//   },
+//   filterLabel: {
+//     fontSize: 14,
+//     fontWeight: "600",
+//     color: "#374151",
+//     marginBottom: 12,
+//   },
+  
+//   // Custom Dropdown Styles
+//   dropdownContainer: {
+//     position: 'relative',
+//   },
+//   dropdownButton: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     justifyContent: 'space-between',
+//     backgroundColor: '#F9FAFB',
+//     borderWidth: 2,
+//     borderColor: '#E5E7EB',
+//     borderRadius: 12,
+//     paddingHorizontal: 16,
+//     paddingVertical: 14,
+//     minHeight: 52,
+//   },
+//   dropdownButtonOpen: {
+//     borderColor: '#3B82F6',
+//     backgroundColor: '#EFF6FF',
+//     borderBottomLeftRadius: 0,
+//     borderBottomRightRadius: 0,
+//   },
+//   dropdownDisabled: {
+//     backgroundColor: '#F3F4F6',
+//     borderColor: '#E5E7EB',
+//   },
+//   dropdownButtonText: {
+//     fontSize: 16,
+//     color: '#1F2937',
+//     fontWeight: '500',
+//     flex: 1,
+//   },
+//   dropdownPlaceholder: {
+//     color: '#9CA3AF',
+//   },
+//   dropdownDisabledText: {
+//     color: '#9CA3AF',
+//   },
+//   dropdownList: {
+//     position: 'absolute',
+//     top: 52,
+//     left: 0,
+//     right: 0,
+//     backgroundColor: '#FFFFFF',
+//     borderWidth: 2,
+//     borderColor: '#3B82F6',
+//     borderTopWidth: 0,
+//     borderBottomLeftRadius: 12,
+//     borderBottomRightRadius: 12,
+//     maxHeight: 240,
+//     shadowColor: '#000',
+//     shadowOffset: { width: 0, height: 12 },
+//     shadowOpacity: 0.25,
+//     shadowRadius: 20,
+//     elevation: 20,
+//     zIndex: 9999,
+//   },
+//   dropdownScrollView: {
+//     maxHeight: 240,
+//   },
+//   dropdownItem: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     justifyContent: 'space-between',
+//     paddingHorizontal: 16,
+//     paddingVertical: 14,
+//     borderBottomWidth: 1,
+//     borderBottomColor: '#F3F4F6',
+//     backgroundColor: '#FFFFFF',
+//   },
+//   dropdownItemLast: {
+//     borderBottomWidth: 0,
+//   },
+//   dropdownItemSelected: {
+//     backgroundColor: '#EFF6FF',
+//   },
+//   dropdownItemText: {
+//     fontSize: 16,
+//     color: '#1F2937',
+//     flex: 1,
+//   },
+//   dropdownItemTextSelected: {
+//     color: '#3B82F6',
+//     fontWeight: '600',
+//   },
+//   checkIconContainer: {
+//     marginLeft: 8,
+//   },
+
+//   inputGroup: {
+//     marginBottom: 24,
+//     zIndex: 1,
+//   },
+//   inputLabel: {
+//     fontSize: 14,
+//     fontWeight: "600",
+//     color: "#374151",
+//     marginBottom: 12,
+//   },
+//   inputWrapper: {
+//     flexDirection: "row",
+//     alignItems: "center",
+//     backgroundColor: "#F9FAFB",
+//     borderRadius: 12,
+//     borderColor: "#E5E7EB",
+//     paddingRight: 16,
+//     minHeight: 52,
+//   },
+//   textAreaWrapper: {
+//     alignItems: "flex-start",
+//     minHeight: 100,
+//   },
+//   inputIconContainer: {
+//     width: 40,
+//     height: 40,
+//     borderRadius: 10,
+//     alignItems: "center",
+//     justifyContent: "center",
+//     marginLeft: 8,
+//     marginRight: 12,
+//   },
+//   textAreaIcon: {
+//     alignSelf: "flex-start",
+//     marginTop: 8,
+//   },
+//   input: {
+//     flex: 1,
+//     fontSize: 16,
+//     color: "#1F2937",
+//     fontWeight: "500",
+//   },
+//   textArea: {
+//     minHeight: 80,
+//     paddingTop: 12,
+//     paddingBottom: 12,
+//     textAlignVertical: "top",
+//   },
+//   addButton: {
+//     borderRadius: 16,
+//     overflow: "hidden",
+//     marginTop: 12,
+//     zIndex: 1,
+//     shadowColor: "#3B82F6",
+//     shadowOffset: { width: 0, height: 4 },
+//     shadowOpacity: 0.3,
+//     shadowRadius: 8,
+//     elevation: 6,
+//   },
+//   addButtonDisabled: {
+//     opacity: 0.6,
+//     shadowOpacity: 0,
+//     elevation: 0,
+//   },
+//   addButtonGradient: {
+//     flexDirection: "row",
+//     alignItems: "center",
+//     justifyContent: "center",
+//     paddingVertical: 18,
+//     paddingHorizontal: 28,
+//   },
+//   addButtonIcon: {
+//     marginRight: 8,
+//   },
+//   addButtonText: {
+//     color: "#FFFFFF",
+//     fontWeight: "bold",
+//     fontSize: 16,
+//   },
+//   commissionCard: {
+//     backgroundColor: "#FFFFFF",
+//     borderRadius: 20,
+//     padding: 24,
+//     shadowColor: "#000",
+//     shadowOffset: { width: 0, height: 4 },
+//     shadowOpacity: 0.08,
+//     shadowRadius: 12,
+//     elevation: 8,
+//     marginBottom: 16,
+//     zIndex: 1,
+//     borderLeftWidth: 4,
+//     borderLeftColor: "#3B82F6",
+//   },
+//   commissionContent: {
+//     flexDirection: "row",
+//     alignItems: "center",
+//     justifyContent: "space-between",
+//   },
+//   commissionLeft: {
+//     flexDirection: "row",
+//     alignItems: "center",
+//     flex: 1,
+//     marginRight: 16,
+//   },
+//   agentAvatar: {
+//     width: 52,
+//     height: 52,
+//     borderRadius: 26,
+//     alignItems: "center",
+//     justifyContent: "center",
+//     marginRight: 16,
+//     shadowColor: "#3B82F6",
+//     shadowOffset: { width: 0, height: 2 },
+//     shadowOpacity: 0.3,
+//     shadowRadius: 4,
+//     elevation: 4,
+//   },
+//   agentInitial: {
+//     fontSize: 18,
+//     fontWeight: "bold",
+//     color: "#FFFFFF",
+//   },
+//   commissionInfo: {
+//     flex: 1,
+//   },
+//   agentName: {
+//     fontSize: 18,
+//     fontWeight: "bold",
+//     color: "#1F2937",
+//     marginBottom: 6,
+//   },
+//   description: {
+//     fontSize: 14,
+//     color: "#6B7280",
+//     marginBottom: 8,
+//     lineHeight: 20,
+//   },
+//   dateContainer: {
+//     flexDirection: "row",
+//     alignItems: "center",
+//   },
+//   date: {
+//     fontSize: 12,
+//     color: "#8B9DC3",
+//     marginLeft: 6,
+//     fontWeight: "600",
+//   },
+//   amountContainer: {
+//     alignItems: "flex-end",
+//   },
+//   amount: {
+//     fontSize: 18,
+//     fontWeight: "bold",
+//     color: "#10B981",
+//     marginBottom: 6,
+//   },
+//   amountBadge: {
+//     backgroundColor: "#D1FAE5",
+//     borderRadius: 20,
+//     padding: 8,
+//   },
+//   loadingContainer: {
+//     alignItems: "center",
+//     paddingVertical: 60,
+//     backgroundColor: "#FFFFFF",
+//     borderRadius: 20,
+//     shadowColor: "#000",
+//     shadowOffset: { width: 0, height: 4 },
+//     shadowOpacity: 0.1,
+//     shadowRadius: 12,
+//     elevation: 8,
+//   },
+//   loadingText: {
+//     marginTop: 16,
+//     fontSize: 16,
+//     color: "#6B7280",
+//     fontWeight: "500",
+//   },
+//   emptyContainer: {
+//     alignItems: "center",
+//     paddingVertical: 80,
+//     paddingHorizontal: 40,
+//     backgroundColor: "#FFFFFF",
+//     borderRadius: 20,
+//     shadowColor: "#000",
+//     shadowOffset: { width: 0, height: 4 },
+//     shadowOpacity: 0.1,
+//     shadowRadius: 12,
+//     elevation: 8,
+//   },
+//   emptyIconContainer: {
+//     width: 80,
+//     height: 80,
+//     borderRadius: 40,
+//     alignItems: "center",
+//     justifyContent: "center",
+//     marginBottom: 20,
+//   },
+//   emptyTitle: {
+//     fontSize: 20,
+//     fontWeight: "bold",
+//     color: "#374151",
+//     marginBottom: 12,
+//     textAlign: "center",
+//   },
+//   emptyText: {
+//     fontSize: 14,
+//     color: "#6B7280",
+//     textAlign: "center",
+//     lineHeight: 22,
+//   },
+//   listContainer: {
+//     paddingBottom: 20,
+//   },
+//   modalContainer: {
+//     flex: 1,
+//     justifyContent: "center",
+//     alignItems: "center",
+//     backgroundColor: "rgba(0, 0, 0, 0.6)",
+//     paddingHorizontal: 20,
+//   },
+//   modalContent: {
+//     backgroundColor: "#FFFFFF",
+//     borderRadius: 24,
+//     padding: 0,
+//     width: "100%",
+//     maxWidth: 400,
+//     shadowColor: "#000",
+//     shadowOffset: { width: 0, height: 8 },
+//     shadowOpacity: 0.25,
+//     shadowRadius: 24,
+//     elevation: 20,
+//     overflow: 'hidden',
+//   },
+//   modalHeader: {
+//     flexDirection: "row",
+//     alignItems: "center",
+//     justifyContent: "space-between",
+//     padding: 24,
+//     paddingBottom: 20,
+//     borderBottomWidth: 1,
+//     borderBottomColor: "#F3F4F6",
+//     backgroundColor: "#F9FAFB",
+//   },
+//   modalTitle: {
+//     fontSize: 22,
+//     fontWeight: "bold",
+//     color: "#1F2937",
+//   },
+//   closeIcon: {
+//     padding: 8,
+//     borderRadius: 20,
+//     backgroundColor: "#FFFFFF",
+//   },
+//   modalBody: {
+//     padding: 24,
+//   },
+//   modalRow: {
+//     flexDirection: "row",
+//     alignItems: "flex-start",
+//     marginBottom: 24,
+//     paddingBottom: 24,
+//     borderBottomWidth: 1,
+//     borderBottomColor: "#F3F4F6",
+//   },
+//   modalIconContainer: {
+//     width: 40,
+//     height: 40,
+//     borderRadius: 20,
+//     alignItems: "center",
+//     justifyContent: "center",
+//     backgroundColor: "#F3F4F6",
+//     marginRight: 16,
+//   },
+//   modalRowContent: {
+//     flex: 1,
+//   },
+//   modalLabel: {
+//     fontSize: 14,
+//     color: "#6B7280",
+//     fontWeight: "600",
+//     marginBottom: 6,
+//     textTransform: "uppercase",
+//     letterSpacing: 0.5,
+//   },
+//   modalValue: {
+//     fontSize: 16,
+//     color: "#1F2937",
+//     fontWeight: "500",
+//     lineHeight: 24,
+//   },
+//   modalAmount: {
+//     color: "#10B981",
+//     fontWeight: "bold",
+//     fontSize: 20,
+//   },
+//   closeButton: {
+//     margin: 20,
+//     marginTop: 0,
+//     borderRadius: 16,
+//     overflow: "hidden",
+//     shadowColor: "#3B82F6",
+//     shadowOffset: { width: 0, height: 4 },
+//     shadowOpacity: 0.3,
+//     shadowRadius: 8,
+//     elevation: 6,
+//   },
+//   closeButtonGradient: {
+//     paddingVertical: 16,
+//     alignItems: "center",
+//   },
+//   closeButtonText: {
+//     color: "#FFFFFF",
+//     fontSize: 16,
+//     fontWeight: "bold",
+//   },
+// });
+
+// export default CommissionScreen;

@@ -19,6 +19,7 @@ import {
   Animated,
   Pressable,
   KeyboardAvoidingView,
+  LinearGradient,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { getDebtorsOverview, payDebt, createDebtor } from "../services/api";
@@ -36,6 +37,73 @@ const scale = (size) => {
 
 const moderateScale = (size, factor = 0.5) => {
   return size + (scale(size) - size) * factor;
+};
+
+// Animated Statistics Card Component
+const StatCard = ({ icon, label, value, color, delay = 0, trend, trendValue }) => {
+  const [scaleAnim] = useState(new Animated.Value(0));
+  const [fadeAnim] = useState(new Animated.Value(0));
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        delay,
+        tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        delay,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={[
+        styles.statCard,
+        {
+          transform: [{ scale: scaleAnim }],
+          opacity: fadeAnim,
+        },
+      ]}
+    >
+      <View style={styles.statCardContent}>
+        <View style={[styles.statIconContainer, { backgroundColor: color + "20" }]}>
+          <Icon name={icon} size={moderateScale(28)} color={color} />
+        </View>
+        
+        <View style={styles.statInfo}>
+          <Text style={styles.statLabel}>{label}</Text>
+          <Text style={[styles.statValue, { color }]}>{value}</Text>
+          {trend && (
+            <View style={styles.trendContainer}>
+              <Icon
+                name={trend === "up" ? "trending-up" : "trending-down"}
+                size={moderateScale(14)}
+                color={trend === "up" ? "#10B981" : "#EF4444"}
+              />
+              <Text
+                style={[
+                  styles.trendText,
+                  { color: trend === "up" ? "#10B981" : "#EF4444" },
+                ]}
+              >
+                {trendValue}
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+      
+      {/* Decorative corner accent */}
+      <View style={[styles.cardAccent, { backgroundColor: color }]} />
+    </Animated.View>
+  );
 };
 
 const DebtorItem = React.memo(
@@ -106,12 +174,27 @@ const DebtorItem = React.memo(
     };
 
     const getDebtSeverity = (amount) => {
-      if (amount > 1000000) return { color: "#DC2626", label: "High", gradient: ["#DC2626", "#EF4444"] };
-      if (amount > 500000) return { color: "#F59E0B", label: "Medium", gradient: ["#F59E0B", "#FBBF24"] };
-      return { color: "#10B981", label: "Low", gradient: ["#10B981", "#34D399"] };
+      if (amount > 1000000)
+        return {
+          color: "#DC2626",
+          label: "Critical",
+          bgColor: "#FEE2E2",
+        };
+      if (amount > 500000)
+        return {
+          color: "#F59E0B",
+          label: "High",
+          bgColor: "#FEF3C7",
+        };
+      return {
+        color: "#10B981",
+        label: "Normal",
+        bgColor: "#D1FAE5",
+      };
     };
 
     const debtSeverity = getDebtSeverity(item.balance_due);
+
     const expandedHeight = animatedHeight.interpolate({
       inputRange: [0, 1],
       outputRange: [0, 350],
@@ -128,39 +211,52 @@ const DebtorItem = React.memo(
         android_ripple={{ color: "#F1F5F9", borderless: false }}
       >
         <View style={styles.debtorHeader}>
-          <View style={styles.debtorInfo}>
-            <View style={styles.nameRow}>
-              <View style={styles.avatarContainer}>
-                <Text style={styles.avatarText}>
-                  {(item.debtor_name || "U").charAt(0).toUpperCase()}
-                </Text>
-              </View>
-              <View style={styles.nameContainer}>
+          <View style={styles.debtorMainInfo}>
+            <View
+              style={[
+                styles.debtorAvatar,
+                { backgroundColor: debtSeverity.bgColor },
+              ]}
+            >
+              <Text style={[styles.avatarText, { color: debtSeverity.color }]}>
+                {(item.debtor_name || "U").charAt(0).toUpperCase()}
+              </Text>
+            </View>
+
+            <View style={styles.debtorDetails}>
+              <View style={styles.nameRow}>
                 <Text style={styles.debtorName} numberOfLines={1}>
                   {item.debtor_name || "Unknown Debtor"}
                 </Text>
                 <View
                   style={[
-                    styles.severityBadge,
-                    { backgroundColor: debtSeverity.color + "15" },
+                    styles.statusBadge,
+                    { backgroundColor: debtSeverity.bgColor },
                   ]}
                 >
                   <View
                     style={[
-                      styles.severityDot,
+                      styles.statusDot,
                       { backgroundColor: debtSeverity.color },
                     ]}
                   />
                   <Text
-                    style={[styles.severityText, { color: debtSeverity.color }]}
+                    style={[styles.statusText, { color: debtSeverity.color }]}
                   >
                     {debtSeverity.label}
                   </Text>
                 </View>
               </View>
+
+              <View style={styles.amountRow}>
+                <Text style={styles.debtLabel}>Outstanding</Text>
+                <Text style={styles.debtAmount}>
+                  {formatCurrency(item.balance_due || 0)}
+                </Text>
+              </View>
             </View>
-            <Text style={styles.debtAmount}>{formatCurrency(item.balance_due || 0)}</Text>
           </View>
+
           <TouchableOpacity
             style={[
               styles.expandButton,
@@ -172,7 +268,7 @@ const DebtorItem = React.memo(
             <Icon
               name={isExpanded ? "expand-less" : "expand-more"}
               size={moderateScale(24)}
-              color={isExpanded ? "#3B82F6" : "#64748B"}
+              color={isExpanded ? "#3B82F6" : "#94A3B8"}
             />
           </TouchableOpacity>
         </View>
@@ -185,27 +281,35 @@ const DebtorItem = React.memo(
           }}
         >
           <View style={styles.expandedContent}>
-            <View style={styles.debtorDetails}>
-              <View style={styles.detailCard}>
-                <Icon name="phone" size={moderateScale(20)} color="#3B82F6" />
-                <View style={styles.detailContent}>
-                  <Text style={styles.detailLabel}>Phone</Text>
-                  <Text style={styles.detailText}>
-                    {item.phone || "No phone number"}
+            <View style={styles.infoGrid}>
+              <View style={styles.infoItem}>
+                <View style={styles.infoIconContainer}>
+                  <Icon name="phone" size={moderateScale(18)} color="#3B82F6" />
+                </View>
+                <View style={styles.infoTextContainer}>
+                  <Text style={styles.infoLabel}>Phone</Text>
+                  <Text style={styles.infoValue}>
+                    {item.phone || "Not provided"}
                   </Text>
                 </View>
               </View>
 
-              <View style={styles.detailCard}>
-                <Icon name="calendar-today" size={moderateScale(20)} color="#10B981" />
-                <View style={styles.detailContent}>
-                  <Text style={styles.detailLabel}>Created</Text>
-                  <Text style={styles.detailText}>
+              <View style={styles.infoItem}>
+                <View style={styles.infoIconContainer}>
+                  <Icon
+                    name="calendar-today"
+                    size={moderateScale(18)}
+                    color="#10B981"
+                  />
+                </View>
+                <View style={styles.infoTextContainer}>
+                  <Text style={styles.infoLabel}>Created</Text>
+                  <Text style={styles.infoValue}>
                     {item.created_at
                       ? new Date(item.created_at).toLocaleDateString("en-US", {
-                          year: "numeric",
                           month: "short",
                           day: "numeric",
+                          year: "numeric",
                         })
                       : "N/A"}
                   </Text>
@@ -216,35 +320,38 @@ const DebtorItem = React.memo(
             {item.balance_due > 0 && (
               <View style={styles.paymentSection}>
                 <TouchableOpacity
-                  style={styles.payFullButton}
+                  style={styles.quickPayButton}
                   onPress={() => onPayFull(item.id, item.balance_due)}
                   disabled={isProcessingPayment}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.payFullButtonContent}>
-                    <Icon name="payment" size={moderateScale(20)} color="#FFFFFF" />
-                    <Text style={styles.payFullButtonText}>
-                      Pay Full Amount
-                    </Text>
+                  <View style={styles.quickPayContent}>
+                    <Icon
+                      name="flash-on"
+                      size={moderateScale(20)}
+                      color="#FFFFFF"
+                    />
+                    <View style={styles.quickPayText}>
+                      <Text style={styles.quickPayLabel}>Quick Pay</Text>
+                      <Text style={styles.quickPayAmount}>
+                        {formatCurrency(item.balance_due)}
+                      </Text>
+                    </View>
                   </View>
-                  <Text style={styles.payFullAmount}>
-                    {formatCurrency(item.balance_due)}
-                  </Text>
+                  <Icon
+                    name="arrow-forward"
+                    size={moderateScale(20)}
+                    color="#FFFFFF"
+                  />
                 </TouchableOpacity>
 
-                <View style={styles.divider}>
-                  <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>OR</Text>
-                  <View style={styles.dividerLine} />
-                </View>
-
-                <View style={styles.partialPaymentContainer}>
-                  <View style={styles.inputWrapper}>
-                    <Text style={styles.inputLabel}>Partial Payment</Text>
-                    <View style={styles.inputWithIcon}>
-                      <Text style={styles.currencySymbol}>TSh</Text>
+                <View style={styles.customPaymentContainer}>
+                  <Text style={styles.customPaymentLabel}>Custom Amount</Text>
+                  <View style={styles.customPaymentRow}>
+                    <View style={styles.customInputWrapper}>
+                      <Text style={styles.inputCurrency}>TSh</Text>
                       <TextInput
-                        style={styles.paymentInput}
+                        style={styles.customInput}
                         placeholder="0"
                         placeholderTextColor="#94A3B8"
                         keyboardType="numeric"
@@ -261,35 +368,36 @@ const DebtorItem = React.memo(
                         onSubmitEditing={handlePayment}
                       />
                     </View>
-                  </View>
 
-                  <TouchableOpacity
-                    style={[
-                      styles.payButton,
-                      (isPaying ||
+                    <TouchableOpacity
+                      style={[
+                        styles.customPayButton,
+                        (isPaying ||
+                          isProcessingPayment ||
+                          !amount ||
+                          parseFloat(amount) <= 0) &&
+                          styles.customPayButtonDisabled,
+                      ]}
+                      onPress={handlePayment}
+                      disabled={
+                        isPaying ||
                         isProcessingPayment ||
                         !amount ||
-                        parseFloat(amount) <= 0) &&
-                        styles.payButtonDisabled,
-                    ]}
-                    onPress={handlePayment}
-                    disabled={
-                      isPaying ||
-                      isProcessingPayment ||
-                      !amount ||
-                      parseFloat(amount) <= 0
-                    }
-                    activeOpacity={0.7}
-                  >
-                    {isPaying ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <>
-                        <Icon name="send" size={moderateScale(18)} color="#FFFFFF" />
-                        <Text style={styles.payButtonText}>Pay</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
+                        parseFloat(amount) <= 0
+                      }
+                      activeOpacity={0.7}
+                    >
+                      {isPaying ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Icon
+                          name="check"
+                          size={moderateScale(20)}
+                          color="#FFFFFF"
+                        />
+                      )}
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             )}
@@ -314,23 +422,6 @@ const DebtOverviewScreen = () => {
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("amount");
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      "keyboardDidShow",
-      (e) => setKeyboardHeight(e.endCoordinates.height)
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      "keyboardDidHide",
-      () => setKeyboardHeight(0)
-    );
-
-    return () => {
-      keyboardDidShowListener?.remove();
-      keyboardDidHideListener?.remove();
-    };
-  }, []);
 
   const filteredAndSortedDebtors = useMemo(() => {
     let filtered = debtors.filter(
@@ -353,53 +444,53 @@ const DebtOverviewScreen = () => {
     });
   }, [debtors, searchQuery, sortBy]);
 
-  // Fetch accessible agents from the API
-const fetchAgents = async () => {
-  try {
-    const userData = await getUserData();
-    if (!userData) {
-      throw new Error("User data not available");
-    }
-
-    const headers = {
-      "access-token": userData.userToken,
-      client: userData.client,
-      uid: userData.uid,
-    };
-
-    const response = await fetch(
-      `${process.env.REACT_APP_API_URL || "https://tq-backend-main.fly.dev"}/employees/agents`,
-      {
-        method: "GET",
-        headers: {
-          ...headers,
-          "Content-Type": "application/json",
-        },
+  const fetchAgents = async () => {
+    try {
+      const userData = await getUserData();
+      if (!userData) {
+        throw new Error("User data not available");
       }
-    );
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || "Failed to fetch agents");
+      const headers = {
+        "access-token": userData.userToken,
+        client: userData.client,
+        uid: userData.uid,
+      };
+
+      const response = await fetch(
+        `${
+          process.env.REACT_APP_API_URL || "https://tq-backend-main.fly.dev"
+        }/employees/agents`,
+        {
+          method: "GET",
+          headers: {
+            ...headers,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to fetch agents");
+      }
+
+      const data = await response.json();
+      const agentsList = Array.isArray(data) ? data : [];
+      setAgents(agentsList);
+
+      if (agentsList.length === 1) {
+        setSelectedAgentId(agentsList[0].id.toString());
+      }
+    } catch (error) {
+      console.error("Error fetching agents:", error);
+      Alert.alert(
+        "Error",
+        error.message || "Failed to load agents. Please try again."
+      );
+      setAgents([]);
     }
-
-    const data = await response.json();
-    const agentsList = Array.isArray(data) ? data : [];
-    setAgents(agentsList);
-
-    // Auto-select first agent if only one exists
-    if (agentsList.length === 1) {
-      setSelectedAgentId(agentsList[0].id.toString());
-    }
-  } catch (error) {
-    console.error("Error fetching agents:", error);
-    Alert.alert(
-      "Error",
-      error.message || "Failed to load agents. Please try again."
-    );
-    setAgents([]); // Set empty array on error
-  }
-};
+  };
 
   const fetchDebtors = async () => {
     try {
@@ -468,6 +559,7 @@ const fetchAgents = async () => {
       };
 
       const response = await payDebt(debtorId, { amount }, headers);
+
       Alert.alert(
         "Success",
         `Payment of TSh ${amount.toLocaleString()} recorded successfully`
@@ -554,6 +646,7 @@ const fetchAgents = async () => {
       };
 
       await createDebtor(debtorData, headers);
+
       Alert.alert("Success", "Debtor created successfully");
       setShowCreateDebtorForm(false);
       setNewDebtorName("");
@@ -596,113 +689,102 @@ const fetchAgents = async () => {
   }, []);
 
   const totalPaid = debtors.reduce((sum, d) => sum + (d.total_paid || 0), 0);
+  const averageDebt = debtors.length > 0 ? totalDebt / debtors.length : 0;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="light-content" backgroundColor="#1E293B" />
       <View style={styles.container}>
-        {/* Modern Header with Gradient */}
-        <View style={styles.headerContainer}>
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.headerTitle}>Debt Management</Text>
-              <Text style={styles.headerSubtitle}>
-                Track and manage outstanding debts
-              </Text>
+        {/* Modern Header with Gradient Background */}
+        <View style={styles.headerGradient}>
+          <View style={styles.headerContent}>
+            <View style={styles.headerTop}>
+              <View style={styles.headerTextContainer}>
+                <Text style={styles.headerGreeting}>Debt Overview</Text>
+                <Text style={styles.headerSubtitle}>
+                  Monitor and manage all outstanding debts
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => setShowCreateDebtorForm(true)}
+              >
+                <Icon name="add" size={moderateScale(24)} color="#FFFFFF" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.headerButton}
-              onPress={() => setShowCreateDebtorForm(true)}
-            >
-              <Icon name="add" size={moderateScale(24)} color="#3B82F6" />
-            </TouchableOpacity>
+
+            {/* New Statistics Cards */}
+            <View style={styles.statsGrid}>
+              <StatCard
+                icon="account-balance-wallet"
+                label="Total Outstanding"
+                value={formatCurrency(totalDebt)}
+                color="#EF4444"
+                delay={0}
+              />
+              <StatCard
+                icon="groups"
+                label="Active Debtors"
+                value={debtors.length.toString()}
+                color="#3B82F6"
+                delay={100}
+              />
+              <StatCard
+                icon="bar-chart"
+                label="Average Debt"
+                value={formatCurrency(averageDebt)}
+                color="#10B981"
+                delay={200}
+              />
+            </View>
           </View>
         </View>
 
-        {/* Enhanced Summary Cards */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.summaryContainer}
-        >
-          <View style={[styles.summaryCard, styles.totalDebtCard]}>
-            <View style={styles.summaryIconContainer}>
-              <Icon name="trending-down" size={moderateScale(28)} color="#EF4444" />
-            </View>
-            <View style={styles.summaryContent}>
-              <Text style={styles.summaryLabel}>Total Outstanding</Text>
-              <Text style={styles.summaryValue}>{formatCurrency(totalDebt)}</Text>
-            </View>
-          </View>
-
-          <View style={[styles.summaryCard, styles.debtorsCard]}>
-            <View style={[styles.summaryIconContainer, { backgroundColor: "#DBEAFE" }]}>
-              <Icon name="people" size={moderateScale(28)} color="#3B82F6" />
-            </View>
-            <View style={styles.summaryContent}>
-              <Text style={styles.summaryLabel}>Active Debtors</Text>
-              <Text style={[styles.summaryValue, { color: "#3B82F6" }]}>
-                {debtors.length}
-              </Text>
-            </View>
-          </View>
-
-          <View style={[styles.summaryCard, styles.avgCard]}>
-            <View style={[styles.summaryIconContainer, { backgroundColor: "#D1FAE5" }]}>
-              <Icon name="analytics" size={moderateScale(28)} color="#10B981" />
-            </View>
-            <View style={styles.summaryContent}>
-              <Text style={styles.summaryLabel}>Average Debt</Text>
-              <Text style={[styles.summaryValue, { color: "#10B981" }]}>
-                {debtors.length > 0
-                  ? formatCurrency(totalDebt / debtors.length)
-                  : "TSh 0"}
-              </Text>
-            </View>
-          </View>
-        </ScrollView>
-
-        {/* Search and Filter */}
-        <View style={styles.searchContainer}>
-          <View style={styles.searchInputContainer}>
+        {/* Search and Filter Section */}
+        <View style={styles.searchSection}>
+          <View style={styles.searchBar}>
             <Icon name="search" size={moderateScale(20)} color="#64748B" />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search debtors..."
+              placeholder="Search by name or phone..."
               placeholderTextColor="#94A3B8"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery("")}>
-                <Icon name="close" size={moderateScale(20)} color="#94A3B8" />
+                <Icon name="close" size={moderateScale(20)} color="#64748B" />
               </TouchableOpacity>
             )}
           </View>
 
           <TouchableOpacity
-            style={styles.sortButton}
+            style={styles.filterButton}
             onPress={() => {
-              const sortOptions = [
-                { label: "Amount (High to Low)", value: "amount" },
-                { label: "Name (A-Z)", value: "name" },
-                { label: "Date (Newest)", value: "date" },
-              ];
               Alert.alert(
                 "Sort By",
                 "Choose sorting option",
-                sortOptions.map((option) => ({
-                  text: option.label,
-                  onPress: () => setSortBy(option.value),
-                }))
+                [
+                  {
+                    text: "Amount (High to Low)",
+                    onPress: () => setSortBy("amount"),
+                  },
+                  { text: "Name (A-Z)", onPress: () => setSortBy("name") },
+                  {
+                    text: "Date (Newest)",
+                    onPress: () => setSortBy("date"),
+                  },
+                  { text: "Cancel", style: "cancel" },
+                ]
               );
             }}
           >
-            <Icon name="tune" size={moderateScale(20)} color="#3B82F6" />
+            <Icon name="filter-list" size={moderateScale(20)} color="#3B82F6" />
+            <Text style={styles.filterText}>Sort</Text>
           </TouchableOpacity>
         </View>
 
-        {/* List or Empty State */}
+        {/* Debtors List */}
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#3B82F6" />
@@ -720,17 +802,19 @@ const fetchAgents = async () => {
               />
             }
           >
-            <View style={styles.emptyIllustration}>
-              <Icon name="money-off" size={moderateScale(80)} color="#CBD5E1" />
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconContainer}>
+                <Icon name="receipt-long" size={moderateScale(60)} color="#CBD5E1" />
+              </View>
+              <Text style={styles.emptyTitle}>
+                {searchQuery ? "No Results Found" : "No Active Debtors"}
+              </Text>
+              <Text style={styles.emptyMessage}>
+                {searchQuery
+                  ? "Try adjusting your search criteria"
+                  : "Start by adding a new debtor using the + button above"}
+              </Text>
             </View>
-            <Text style={styles.emptyText}>
-              {searchQuery ? "No matching debtors found" : "No active debtors"}
-            </Text>
-            <Text style={styles.emptySubtext}>
-              {searchQuery
-                ? "Try adjusting your search"
-                : "Tap the + button to add a new debtor"}
-            </Text>
           </ScrollView>
         ) : (
           <FlatList
@@ -749,15 +833,6 @@ const fetchAgents = async () => {
             showsVerticalScrollIndicator={false}
           />
         )}
-
-        {/* Floating Action Button */}
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => setShowCreateDebtorForm(true)}
-          activeOpacity={0.8}
-        >
-          <Icon name="add" size={moderateScale(28)} color="#FFFFFF" />
-        </TouchableOpacity>
 
         {/* Create Debtor Modal */}
         <Modal
@@ -778,7 +853,6 @@ const fetchAgents = async () => {
               style={styles.keyboardAvoidingView}
             >
               <View style={styles.modalContent}>
-                {/* Modal Header */}
                 <View style={styles.modalHeader}>
                   <View>
                     <Text style={styles.modalTitle}>Add New Debtor</Text>
@@ -803,49 +877,53 @@ const fetchAgents = async () => {
 
                 <ScrollView
                   showsVerticalScrollIndicator={false}
-                  contentContainerStyle={styles.scrollViewContent}
+                  contentContainerStyle={styles.modalScrollContent}
                   keyboardShouldPersistTaps="handled"
                 >
                   {/* Agent Selection */}
                   <View style={styles.inputGroup}>
                     <View style={styles.labelRow}>
-                      <Text style={styles.label}>Agent/Service Provider</Text>
-                      <Text style={styles.required}>*</Text>
+                      <Text style={styles.inputLabel}>Service Provider</Text>
+                      <Text style={styles.requiredStar}>*</Text>
                     </View>
                     {agents.length === 0 ? (
-                      <View style={styles.noAgentsContainer}>
-                        <Icon name="warning" size={moderateScale(24)} color="#F59E0B" />
+                      <View style={styles.noAgentsWarning}>
+                        <Icon
+                          name="info-outline"
+                          size={moderateScale(20)}
+                          color="#F59E0B"
+                        />
                         <Text style={styles.noAgentsText}>
-                          No agents available. Please contact your admin.
+                          No agents available. Contact your administrator.
                         </Text>
                       </View>
                     ) : (
-                      <View style={styles.agentsGrid}>
+                      <View style={styles.agentsList}>
                         {agents.map((agent) => (
                           <TouchableOpacity
                             key={agent.id}
                             style={[
-                              styles.agentOption,
+                              styles.agentCard,
                               selectedAgentId === agent.id.toString() &&
-                                styles.agentOptionSelected,
+                                styles.agentCardSelected,
                             ]}
                             onPress={() =>
                               setSelectedAgentId(agent.id.toString())
                             }
                             activeOpacity={0.7}
                           >
-                            <View style={styles.agentOptionHeader}>
+                            <View style={styles.agentCardContent}>
                               <View
                                 style={[
-                                  styles.agentIcon,
+                                  styles.agentIconCircle,
                                   selectedAgentId === agent.id.toString() && {
                                     backgroundColor: "#3B82F6",
                                   },
                                 ]}
                               >
                                 <Icon
-                                  name="business"
-                                  size={moderateScale(20)}
+                                  name="store"
+                                  size={moderateScale(18)}
                                   color={
                                     selectedAgentId === agent.id.toString()
                                       ? "#FFFFFF"
@@ -853,36 +931,36 @@ const fetchAgents = async () => {
                                   }
                                 />
                               </View>
-                              {selectedAgentId === agent.id.toString() && (
-                                <View style={styles.checkmark}>
-                                  <Icon
-                                    name="check-circle"
-                                    size={moderateScale(22)}
-                                    color="#3B82F6"
-                                  />
-                                </View>
-                              )}
+                              <View style={styles.agentInfo}>
+                                <Text
+                                  style={[
+                                    styles.agentCardName,
+                                    selectedAgentId === agent.id.toString() &&
+                                      styles.agentCardNameSelected,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {agent.name}
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.agentCardType,
+                                    selectedAgentId === agent.id.toString() &&
+                                      styles.agentCardTypeSelected,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {agent.type_of_agent}
+                                </Text>
+                              </View>
                             </View>
-                            <Text
-                              style={[
-                                styles.agentName,
-                                selectedAgentId === agent.id.toString() &&
-                                  styles.agentNameSelected,
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {agent.name}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.agentType,
-                                selectedAgentId === agent.id.toString() &&
-                                  styles.agentTypeSelected,
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {agent.type_of_agent}
-                            </Text>
+                            {selectedAgentId === agent.id.toString() && (
+                              <Icon
+                                name="check-circle"
+                                size={moderateScale(24)}
+                                color="#3B82F6"
+                              />
+                            )}
                           </TouchableOpacity>
                         ))}
                       </View>
@@ -892,21 +970,20 @@ const fetchAgents = async () => {
                   {/* Name Input */}
                   <View style={styles.inputGroup}>
                     <View style={styles.labelRow}>
-                      <Text style={styles.label}>Full Name</Text>
-                      <Text style={styles.required}>*</Text>
+                      <Text style={styles.inputLabel}>Debtor Name</Text>
+                      <Text style={styles.requiredStar}>*</Text>
                     </View>
-                    <View style={styles.inputContainer}>
+                    <View style={styles.inputWrapper}>
                       <Icon
-                        name="person"
+                        name="person-outline"
                         size={moderateScale(20)}
                         color="#64748B"
-                        style={styles.inputIcon}
                       />
                       <TextInput
-                        style={styles.input}
+                        style={styles.textInput}
                         value={newDebtorName}
                         onChangeText={setNewDebtorName}
-                        placeholder="Enter debtor's full name"
+                        placeholder="Enter full name"
                         placeholderTextColor="#94A3B8"
                         returnKeyType="next"
                       />
@@ -915,16 +992,15 @@ const fetchAgents = async () => {
 
                   {/* Phone Input */}
                   <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Phone Number</Text>
-                    <View style={styles.inputContainer}>
+                    <Text style={styles.inputLabel}>Phone Number</Text>
+                    <View style={styles.inputWrapper}>
                       <Icon
-                        name="phone"
+                        name="phone-iphone"
                         size={moderateScale(20)}
                         color="#64748B"
-                        style={styles.inputIcon}
                       />
                       <TextInput
-                        style={styles.input}
+                        style={styles.textInput}
                         value={newDebtorPhone}
                         onChangeText={setNewDebtorPhone}
                         placeholder="Enter phone number (optional)"
@@ -938,15 +1014,15 @@ const fetchAgents = async () => {
                   {/* Amount Input */}
                   <View style={styles.inputGroup}>
                     <View style={styles.labelRow}>
-                      <Text style={styles.label}>Debt Amount</Text>
-                      <Text style={styles.required}>*</Text>
+                      <Text style={styles.inputLabel}>Initial Debt Amount</Text>
+                      <Text style={styles.requiredStar}>*</Text>
                     </View>
-                    <View style={styles.inputContainer}>
-                      <View style={styles.currencyContainer}>
-                        <Text style={styles.currencyLabel}>TSh</Text>
+                    <View style={styles.inputWrapper}>
+                      <View style={styles.currencyBadge}>
+                        <Text style={styles.currencyText}>TSh</Text>
                       </View>
                       <TextInput
-                        style={[styles.input, styles.amountInput]}
+                        style={[styles.textInput, styles.amountInput]}
                         keyboardType="numeric"
                         value={newDebtorAmount}
                         onChangeText={(text) => {
@@ -956,7 +1032,7 @@ const fetchAgents = async () => {
                           if (parts[1] && parts[1].length > 2) return;
                           setNewDebtorAmount(cleanText);
                         }}
-                        placeholder="0"
+                        placeholder="0.00"
                         placeholderTextColor="#94A3B8"
                         returnKeyType="done"
                         onSubmitEditing={handleCreateDebtor}
@@ -968,7 +1044,7 @@ const fetchAgents = async () => {
                 {/* Modal Footer */}
                 <View style={styles.modalFooter}>
                   <TouchableOpacity
-                    style={[styles.button, styles.cancelButton]}
+                    style={[styles.modalButton, styles.modalCancelButton]}
                     onPress={() => {
                       Keyboard.dismiss();
                       setShowCreateDebtorForm(false);
@@ -978,17 +1054,17 @@ const fetchAgents = async () => {
                       setNewDebtorAmount("");
                     }}
                   >
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                    <Text style={styles.modalCancelText}>Cancel</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     style={[
-                      styles.button,
-                      styles.submitButton,
+                      styles.modalButton,
+                      styles.modalSubmitButton,
                       (!newDebtorName.trim() ||
                         !newDebtorAmount ||
                         !selectedAgentId) &&
-                        styles.submitButtonDisabled,
+                        styles.modalSubmitButtonDisabled,
                     ]}
                     onPress={handleCreateDebtor}
                     disabled={
@@ -998,7 +1074,7 @@ const fetchAgents = async () => {
                     }
                   >
                     <Icon name="check" size={moderateScale(18)} color="#FFFFFF" />
-                    <Text style={styles.submitButtonText}>Create Debtor</Text>
+                    <Text style={styles.modalSubmitText}>Add Debtor</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1013,119 +1089,136 @@ const fetchAgents = async () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#1E293B",
   },
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#F1F5F9",
   },
-  headerContainer: {
-    backgroundColor: "#FFFFFF",
-    paddingBottom: moderateScale(16),
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+  
+  // Header Styles
+  headerGradient: {
+    backgroundColor: "#1E293B",
+    paddingBottom: moderateScale(24),
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: moderateScale(20),
+  headerContent: {
     paddingTop: moderateScale(16),
   },
-  headerTitle: {
-    fontSize: moderateScale(26),
+  headerTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    paddingHorizontal: moderateScale(20),
+    marginBottom: moderateScale(24),
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  headerGreeting: {
+    fontSize: moderateScale(28),
     fontWeight: "800",
-    color: "#1E293B",
+    color: "#FFFFFF",
     marginBottom: moderateScale(4),
   },
   headerSubtitle: {
     fontSize: moderateScale(14),
-    color: "#64748B",
+    color: "#CBD5E1",
+    opacity: 0.9,
   },
-  headerButton: {
+  addButton: {
     width: moderateScale(48),
     height: moderateScale(48),
     borderRadius: moderateScale(24),
-    backgroundColor: "#EFF6FF",
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
   },
-  summaryContainer: {
+
+  // Stats Grid
+  statsGrid: {
     paddingHorizontal: moderateScale(20),
-    paddingVertical: moderateScale(16),
     gap: moderateScale(12),
   },
-  summaryCard: {
+  statCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: moderateScale(16),
     padding: moderateScale(16),
+    marginBottom: moderateScale(12),
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    overflow: "hidden",
+  },
+  statCardContent: {
     flexDirection: "row",
     alignItems: "center",
-    minWidth: isTablet ? width / 3 - moderateScale(40) : width - moderateScale(120),
-    marginRight: moderateScale(12),
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
   },
-  totalDebtCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: "#EF4444",
-  },
-  debtorsCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: "#3B82F6",
-  },
-  avgCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: "#10B981",
-  },
-  summaryIconContainer: {
+  statIconContainer: {
     width: moderateScale(56),
     height: moderateScale(56),
     borderRadius: moderateScale(28),
-    backgroundColor: "#FEE2E2",
     justifyContent: "center",
     alignItems: "center",
     marginRight: moderateScale(16),
   },
-  summaryContent: {
+  statInfo: {
     flex: 1,
   },
-  summaryLabel: {
-    fontSize: moderateScale(12),
+  statLabel: {
+    fontSize: moderateScale(13),
     color: "#64748B",
     fontWeight: "600",
     marginBottom: moderateScale(4),
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  summaryValue: {
-    fontSize: moderateScale(20),
+  statValue: {
+    fontSize: moderateScale(24),
     fontWeight: "800",
-    color: "#EF4444",
   },
-  searchContainer: {
+  trendContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: moderateScale(4),
+  },
+  trendText: {
+    fontSize: moderateScale(12),
+    fontWeight: "700",
+    marginLeft: moderateScale(4),
+  },
+  cardAccent: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    width: moderateScale(80),
+    height: moderateScale(4),
+    borderBottomLeftRadius: moderateScale(8),
+  },
+
+  // Search Section
+  searchSection: {
     flexDirection: "row",
     paddingHorizontal: moderateScale(20),
-    marginBottom: moderateScale(16),
-    alignItems: "center",
+    paddingVertical: moderateScale(16),
     gap: moderateScale(12),
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
   },
-  searchInputContainer: {
+  searchBar: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#F8FAFC",
     borderRadius: moderateScale(12),
     paddingHorizontal: moderateScale(16),
     paddingVertical: moderateScale(12),
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   searchInput: {
     flex: 1,
@@ -1133,73 +1226,87 @@ const styles = StyleSheet.create({
     color: "#1E293B",
     marginLeft: moderateScale(12),
   },
-  sortButton: {
-    backgroundColor: "#FFFFFF",
-    width: moderateScale(48),
-    height: moderateScale(48),
-    borderRadius: moderateScale(12),
-    justifyContent: "center",
+  filterButton: {
+    flexDirection: "row",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: moderateScale(16),
+    paddingVertical: moderateScale(12),
+    borderRadius: moderateScale(12),
+    gap: moderateScale(6),
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
   },
+  filterText: {
+    fontSize: moderateScale(14),
+    fontWeight: "600",
+    color: "#3B82F6",
+  },
+
+  // List Content
   listContent: {
-    paddingHorizontal: moderateScale(20),
-    paddingBottom: moderateScale(100),
+    padding: moderateScale(20),
+    paddingBottom: moderateScale(40),
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingTop: moderateScale(60),
+    paddingTop: moderateScale(80),
   },
   loadingText: {
     fontSize: moderateScale(15),
     color: "#64748B",
     marginTop: moderateScale(16),
+    fontWeight: "600",
   },
   emptyContainer: {
+    flexGrow: 1,
+  },
+  emptyState: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingTop: moderateScale(80),
     paddingHorizontal: moderateScale(40),
+    paddingTop: moderateScale(80),
   },
-  emptyIllustration: {
+  emptyIconContainer: {
     width: moderateScale(120),
     height: moderateScale(120),
     borderRadius: moderateScale(60),
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#F8FAFC",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: moderateScale(24),
+    borderWidth: 2,
+    borderColor: "#E2E8F0",
+    borderStyle: "dashed",
   },
-  emptyText: {
-    fontSize: moderateScale(18),
+  emptyTitle: {
+    fontSize: moderateScale(20),
     fontWeight: "700",
     color: "#475569",
     marginBottom: moderateScale(8),
     textAlign: "center",
   },
-  emptySubtext: {
+  emptyMessage: {
     fontSize: moderateScale(14),
     color: "#94A3B8",
     textAlign: "center",
     lineHeight: moderateScale(20),
   },
+
+  // Debtor Card Styles
   debtorCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: moderateScale(16),
-    marginBottom: moderateScale(12),
+    marginBottom: moderateScale(16),
+    overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
-    elevation: 2,
-    overflow: "hidden",
+    elevation: 3,
   },
   debtorCardPressed: {
     transform: [{ scale: 0.98 }],
@@ -1207,66 +1314,78 @@ const styles = StyleSheet.create({
   debtorCardExpanded: {
     borderWidth: 2,
     borderColor: "#3B82F6",
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.15,
   },
   debtorHeader: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     padding: moderateScale(16),
   },
-  debtorInfo: {
+  debtorMainInfo: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  debtorAvatar: {
+    width: moderateScale(56),
+    height: moderateScale(56),
+    borderRadius: moderateScale(28),
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: moderateScale(16),
+  },
+  avatarText: {
+    fontSize: moderateScale(22),
+    fontWeight: "800",
+  },
+  debtorDetails: {
     flex: 1,
   },
   nameRow: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: moderateScale(8),
-  },
-  avatarContainer: {
-    width: moderateScale(40),
-    height: moderateScale(40),
-    borderRadius: moderateScale(20),
-    backgroundColor: "#EFF6FF",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: moderateScale(12),
-  },
-  avatarText: {
-    fontSize: moderateScale(16),
-    fontWeight: "700",
-    color: "#3B82F6",
-  },
-  nameContainer: {
-    flex: 1,
+    gap: moderateScale(8),
   },
   debtorName: {
     fontSize: moderateScale(16),
     fontWeight: "700",
     color: "#1E293B",
-    marginBottom: moderateScale(4),
+    flex: 1,
   },
-  severityBadge: {
+  statusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    alignSelf: "flex-start",
     paddingHorizontal: moderateScale(8),
     paddingVertical: moderateScale(4),
     borderRadius: moderateScale(12),
   },
-  severityDot: {
+  statusDot: {
     width: moderateScale(6),
     height: moderateScale(6),
     borderRadius: moderateScale(3),
     marginRight: moderateScale(6),
   },
-  severityText: {
-    fontSize: moderateScale(11),
-    fontWeight: "700",
+  statusText: {
+    fontSize: moderateScale(10),
+    fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
+  amountRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: moderateScale(8),
+  },
+  debtLabel: {
+    fontSize: moderateScale(11),
+    color: "#64748B",
+    fontWeight: "600",
+    textTransform: "uppercase",
+  },
   debtAmount: {
-    fontSize: moderateScale(22),
+    fontSize: moderateScale(20),
     fontWeight: "800",
     color: "#EF4444",
   },
@@ -1280,162 +1399,144 @@ const styles = StyleSheet.create({
   expandButtonActive: {
     backgroundColor: "#EFF6FF",
   },
+
+  // Expanded Content
   expandedContent: {
     paddingHorizontal: moderateScale(16),
     paddingBottom: moderateScale(16),
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
   },
-  debtorDetails: {
+  infoGrid: {
+    flexDirection: "row",
+    gap: moderateScale(12),
+    marginTop: moderateScale(16),
     marginBottom: moderateScale(16),
-    gap: moderateScale(8),
   },
-  detailCard: {
+  infoItem: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#F8FAFC",
     padding: moderateScale(12),
     borderRadius: moderateScale(12),
   },
-  detailContent: {
-    flex: 1,
-    marginLeft: moderateScale(12),
+  infoIconContainer: {
+    width: moderateScale(36),
+    height: moderateScale(36),
+    borderRadius: moderateScale(18),
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: moderateScale(10),
   },
-  detailLabel: {
-    fontSize: moderateScale(11),
-    fontWeight: "600",
+  infoTextContainer: {
+    flex: 1,
+  },
+  infoLabel: {
+    fontSize: moderateScale(10),
     color: "#64748B",
+    fontWeight: "600",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
     marginBottom: moderateScale(2),
   },
-  detailText: {
-    fontSize: moderateScale(14),
+  infoValue: {
+    fontSize: moderateScale(13),
     color: "#1E293B",
-    fontWeight: "600",
+    fontWeight: "700",
   },
+
+  // Payment Section
   paymentSection: {
-    borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
-    paddingTop: moderateScale(16),
-  },
-  payFullButton: {
-    backgroundColor: "#3B82F6",
-    paddingVertical: moderateScale(14),
-    paddingHorizontal: moderateScale(16),
-    borderRadius: moderateScale(12),
-    marginBottom: moderateScale(16),
-  },
-  payFullButtonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: moderateScale(4),
-  },
-  payFullButtonText: {
-    color: "#FFFFFF",
-    fontSize: moderateScale(14),
-    fontWeight: "700",
-    marginLeft: moderateScale(8),
-  },
-  payFullAmount: {
-    color: "#FFFFFF",
-    fontSize: moderateScale(18),
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: moderateScale(16),
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#E2E8F0",
-  },
-  dividerText: {
-    fontSize: moderateScale(11),
-    color: "#94A3B8",
-    marginHorizontal: moderateScale(16),
-    fontWeight: "700",
-    letterSpacing: 1,
-  },
-  partialPaymentContainer: {
-    flexDirection: "row",
-    alignItems: "flex-end",
     gap: moderateScale(12),
   },
-  inputWrapper: {
-    flex: 1,
-  },
-  inputLabel: {
-    fontSize: moderateScale(12),
-    fontWeight: "700",
-    color: "#64748B",
-    marginBottom: moderateScale(8),
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  inputWithIcon: {
+  quickPayButton: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#3B82F6",
+    padding: moderateScale(16),
+    borderRadius: moderateScale(12),
+    shadowColor: "#3B82F6",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  quickPayContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: moderateScale(12),
+  },
+  quickPayText: {
+    gap: moderateScale(2),
+  },
+  quickPayLabel: {
+    fontSize: moderateScale(12),
+    color: "rgba(255, 255, 255, 0.9)",
+    fontWeight: "600",
+  },
+  quickPayAmount: {
+    fontSize: moderateScale(18),
+    color: "#FFFFFF",
+    fontWeight: "800",
+  },
+  customPaymentContainer: {
     backgroundColor: "#F8FAFC",
+    padding: moderateScale(16),
+    borderRadius: moderateScale(12),
+  },
+  customPaymentLabel: {
+    fontSize: moderateScale(12),
+    color: "#64748B",
+    fontWeight: "700",
+    textTransform: "uppercase",
+    marginBottom: moderateScale(12),
+    letterSpacing: 0.5,
+  },
+  customPaymentRow: {
+    flexDirection: "row",
+    gap: moderateScale(12),
+  },
+  customInputWrapper: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: moderateScale(12),
+    paddingHorizontal: moderateScale(16),
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    borderRadius: moderateScale(8),
-    paddingHorizontal: moderateScale(12),
   },
-  currencySymbol: {
+  inputCurrency: {
     fontSize: moderateScale(14),
     fontWeight: "700",
     color: "#64748B",
     marginRight: moderateScale(8),
   },
-  paymentInput: {
+  customInput: {
     flex: 1,
     paddingVertical: moderateScale(12),
     fontSize: moderateScale(16),
     color: "#1E293B",
     fontWeight: "700",
   },
-  payButton: {
-    flexDirection: "row",
-    alignItems: "center",
+  customPayButton: {
+    width: moderateScale(48),
+    height: moderateScale(48),
+    borderRadius: moderateScale(12),
     backgroundColor: "#10B981",
-    paddingVertical: moderateScale(12),
-    paddingHorizontal: moderateScale(20),
-    borderRadius: moderateScale(8),
-    justifyContent: "center",
-    minWidth: moderateScale(80),
-  },
-  payButtonDisabled: {
-    backgroundColor: "#94A3B8",
-    opacity: 0.6,
-  },
-  payButtonText: {
-    color: "#FFFFFF",
-    fontSize: moderateScale(14),
-    fontWeight: "700",
-    marginLeft: moderateScale(6),
-  },
-  fab: {
-    position: "absolute",
-    bottom: moderateScale(24),
-    right: moderateScale(24),
-    backgroundColor: "#3B82F6",
-    width: moderateScale(64),
-    height: moderateScale(64),
-    borderRadius: moderateScale(32),
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#3B82F6",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
   },
+  customPayButtonDisabled: {
+    backgroundColor: "#CBD5E1",
+  },
+
+  // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
     justifyContent: "flex-end",
   },
   keyboardAvoidingView: {
@@ -1446,15 +1547,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: moderateScale(24),
     borderTopRightRadius: moderateScale(24),
-    paddingTop: moderateScale(24),
-    maxHeight: height * 0.9,
+    maxHeight: height * 0.85,
   },
   modalHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     paddingHorizontal: moderateScale(24),
-    marginBottom: moderateScale(24),
+    paddingTop: moderateScale(24),
     paddingBottom: moderateScale(20),
     borderBottomWidth: 1,
     borderBottomColor: "#F1F5F9",
@@ -1477,9 +1577,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  scrollViewContent: {
+  modalScrollContent: {
     paddingHorizontal: moderateScale(24),
-    paddingBottom: moderateScale(24),
+    paddingVertical: moderateScale(24),
   },
   inputGroup: {
     marginBottom: moderateScale(24),
@@ -1487,89 +1587,85 @@ const styles = StyleSheet.create({
   labelRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: moderateScale(8),
+    marginBottom: moderateScale(10),
   },
-  label: {
+  inputLabel: {
     fontSize: moderateScale(14),
     fontWeight: "700",
     color: "#374151",
   },
-  required: {
+  requiredStar: {
     fontSize: moderateScale(14),
     color: "#EF4444",
     marginLeft: moderateScale(4),
     fontWeight: "700",
   },
-  noAgentsContainer: {
+  noAgentsWarning: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FEF3C7",
     padding: moderateScale(16),
     borderRadius: moderateScale(12),
-    borderWidth: 1,
-    borderColor: "#FCD34D",
+    gap: moderateScale(12),
   },
   noAgentsText: {
     flex: 1,
     fontSize: moderateScale(13),
     color: "#92400E",
-    marginLeft: moderateScale(12),
     lineHeight: moderateScale(18),
   },
-  agentsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  agentsList: {
     gap: moderateScale(12),
   },
-  agentOption: {
-    width: isTablet ? "30%" : "48%",
+  agentCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: "#F8FAFC",
+    padding: moderateScale(16),
+    borderRadius: moderateScale(12),
     borderWidth: 2,
     borderColor: "#E2E8F0",
-    borderRadius: moderateScale(12),
-    padding: moderateScale(16),
   },
-  agentOptionSelected: {
-    borderColor: "#3B82F6",
+  agentCardSelected: {
     backgroundColor: "#EFF6FF",
+    borderColor: "#3B82F6",
   },
-  agentOptionHeader: {
+  agentCardContent: {
+    flex: 1,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: moderateScale(12),
   },
-  agentIcon: {
+  agentIconCircle: {
     width: moderateScale(40),
     height: moderateScale(40),
     borderRadius: moderateScale(20),
     backgroundColor: "#E2E8F0",
     justifyContent: "center",
     alignItems: "center",
+    marginRight: moderateScale(12),
   },
-  checkmark: {
-    position: "absolute",
-    top: -moderateScale(4),
-    right: -moderateScale(4),
+  agentInfo: {
+    flex: 1,
   },
-  agentName: {
-    fontSize: moderateScale(14),
+  agentCardName: {
+    fontSize: moderateScale(15),
     fontWeight: "700",
     color: "#1E293B",
-    marginBottom: moderateScale(4),
+    marginBottom: moderateScale(2),
   },
-  agentNameSelected: {
+  agentCardNameSelected: {
     color: "#3B82F6",
   },
-  agentType: {
+  agentCardType: {
     fontSize: moderateScale(12),
     color: "#64748B",
     fontWeight: "600",
   },
-  agentTypeSelected: {
+  agentCardTypeSelected: {
     color: "#60A5FA",
   },
-  inputContainer: {
+  inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#F8FAFC",
@@ -1578,69 +1674,73 @@ const styles = StyleSheet.create({
     borderRadius: moderateScale(12),
     paddingHorizontal: moderateScale(16),
   },
-  inputIcon: {
-    marginRight: moderateScale(12),
-  },
-  input: {
+  textInput: {
     flex: 1,
     paddingVertical: moderateScale(14),
     fontSize: moderateScale(15),
     color: "#1E293B",
+    marginLeft: moderateScale(12),
   },
-  currencyContainer: {
+  currencyBadge: {
     backgroundColor: "#E2E8F0",
     paddingHorizontal: moderateScale(12),
-    paddingVertical: moderateScale(8),
+    paddingVertical: moderateScale(6),
     borderRadius: moderateScale(8),
     marginRight: moderateScale(12),
   },
-  currencyLabel: {
-    fontSize: moderateScale(14),
+  currencyText: {
+    fontSize: moderateScale(13),
     fontWeight: "700",
     color: "#475569",
   },
   amountInput: {
     fontWeight: "700",
-    fontSize: moderateScale(18),
+    fontSize: moderateScale(17),
   },
   modalFooter: {
     flexDirection: "row",
     gap: moderateScale(12),
     paddingHorizontal: moderateScale(24),
     paddingTop: moderateScale(20),
-    paddingBottom: Platform.OS === "ios" ? moderateScale(34) : moderateScale(20),
+    paddingBottom:
+      Platform.OS === "ios" ? moderateScale(34) : moderateScale(20),
     borderTopWidth: 1,
     borderTopColor: "#F1F5F9",
     backgroundColor: "#FFFFFF",
   },
-  button: {
+  modalButton: {
     flex: 1,
     paddingVertical: moderateScale(16),
     borderRadius: moderateScale(12),
     alignItems: "center",
     justifyContent: "center",
   },
-  cancelButton: {
+  modalCancelButton: {
     backgroundColor: "#F8FAFC",
     borderWidth: 1,
     borderColor: "#E2E8F0",
   },
-  cancelButtonText: {
+  modalCancelText: {
     fontSize: moderateScale(15),
     fontWeight: "700",
     color: "#64748B",
   },
-  submitButton: {
+  modalSubmitButton: {
     backgroundColor: "#3B82F6",
     flexDirection: "row",
     alignItems: "center",
     gap: moderateScale(8),
+    shadowColor: "#3B82F6",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  submitButtonDisabled: {
-    backgroundColor: "#94A3B8",
-    opacity: 0.5,
+  modalSubmitButtonDisabled: {
+    backgroundColor: "#CBD5E1",
+    opacity: 0.6,
   },
-  submitButtonText: {
+  modalSubmitText: {
     color: "#FFFFFF",
     fontSize: moderateScale(15),
     fontWeight: "700",
